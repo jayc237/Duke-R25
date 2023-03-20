@@ -1,0 +1,89 @@
+---
+title: Download Taxonomic References
+output: html_document
+---
+
+Download references for taxonomic assignment in DADA2:  https://benjjneb.github.io/dada2/training.html
+
+
+
+# Set up directory to receive data
+
+```{r}
+library(readr)
+library(tibble)
+library(dplyr)
+library(fs)
+library(tools)
+library(here)
+```
+
+# Set up directory to receive data
+
+```{r}
+"content/atacama/config.R" %>%
+    here() %>%
+    source()
+Sys.chmod(data_dir,mode = "755")
+dir.create(ref_dir, recursive = TRUE, showWarnings = FALSE)
+```
+
+# Generate MD5 file from zenodo
+
+```{r}
+tribble(
+  ~filename, ~md5sum,
+  "silva_nr_v132_train_set.fa.gz", "2c4e2d8d9a936cdf24a91c0d2c113a43", 
+  "silva_species_assignment_v132.fa.gz", "059fa72391d6aa2f17bf69f2cd63b8ea") %>%
+  select(md5sum, filename) ->
+  dada_ref_md5
+
+dada_ref_md5 %>%
+  write_tsv(ref_md5_file, col_names=FALSE)
+```
+
+# Download data
+
+```{r}
+
+downloadReferences = function(reference_url, output_directory){
+  ref_file.path = file.path(output_directory, basename(reference_url))
+  print(ref_file.path)
+  download.file(reference_url, destfile = ref_file.path)
+  file_chmod(ref_file.path, "a-w")
+}
+
+silva_132.url = "https://zenodo.org/record/1172783/files/silva_nr_v132_train_set.fa.gz"
+silva_132_species.url= "https://zenodo.org/record/1172783/files/silva_species_assignment_v132.fa.gz"
+for (url in c(silva_132.url, silva_132_species.url)) {
+  downloadReferences(url, ref_dir)
+}
+```
+
+# Check md5sums
+```{r}
+md5sum(list.files(ref_dir, full.names=TRUE))%>%
+  enframe %>%
+  dplyr::rename(observed_md5=value) %>%
+  mutate(filename=basename(name)) ->
+observed_md5
+
+left_join(dada_ref_md5, observed_md5, by="filename") %>%
+    mutate(match=identical(md5sum,observed_md5)) ->
+    md5check
+
+md5check %>%
+    pull(match) %>%
+    all ->
+    all_md5s_ok
+
+stopifnot(all_md5s_ok)
+```
+
+# Make the data directory read-only
+```{r}
+Sys.chmod(list.files(ref_dir),mode = "444")
+Sys.chmod(ref_dir,mode = "555")
+Sys.chmod(data_dir,mode = "555")
+```
+

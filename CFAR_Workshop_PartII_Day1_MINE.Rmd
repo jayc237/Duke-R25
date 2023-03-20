@@ -1,0 +1,1953 @@
+
+---
+title: "Quantitative Methods for HIV Researchers"
+subtitle: "Part II Day 1: Breakdown of an Experiment"
+author: "Lynn Lin, PhD"
+date: "January 19, 2021"
+output: 
+  rmdformats::material:
+    code_folding: hide
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning=FALSE, tidy.opts=list(width.cutoff=60),tidy=TRUE)
+#knitr::opts_chunk$set(echo = TRUE)
+Sys.setenv("LANGUAGE"="En")
+Sys.setlocale("LC_ALL", "English")
+
+#change for container
+setwd("~/2022-2023-hiv-workshop/statistics")
+
+library(tidyverse)
+library(vioplot)
+library(DT)
+library(cowplot)
+library(Hmisc)
+```
+
+# Introduction {.tabset}
+
+## Learning Objectives and Goals
+
+### The Scientific Process
+
+-   The scientific process and why we need statistical analyses
+
+-   Populations and samples
+
+-   Common study designs and sampling schemes
+
+### Numerical Summaries
+
+-   Data types
+
+-   Measures of central tendency
+
+-   Measures of spread
+
+### Graphical Summaries
+
+-   Bar plot
+
+-   Histogram
+
+-   Boxplot
+
+-   Scatter plot and matrix plot
+
+## Case Study \#1
+
+Efficacy and Tolerability of 3 Nonnucleoside Reverse Transcriptase
+Inhibitor-Sparing Antiretroviral Regimens for Treatment-Naive Volunteers
+Infected With HIV-1: A Randomized, Controlled Equivalence Trial
+
+<https://doi.org//10.7326/M14-1084>
+
+```{r}
+Case1 <- read.csv(file="Data/data_Case1.csv", na.strings="", stringsAsFactors=TRUE)
+
+# Baseline data
+Case1BL <- Case1 %>% filter(week==0) %>% droplevels()
+```
+
+NTISID: NTIS Identification number
+
+WEEK: Study week
+
+ARM: Treatment group (A=TRV+RTV+ATV, B=TRV+RAL, C=TRV+RTV+DRV)
+
+AGE: Age at study enrollment (years)
+
+SEX: Sex
+
+RACE: Race
+
+AIDS_DX: Prior AIDS diagnosis
+
+CVDHX: CVD history
+
+MODET: Mode of HIV transmission
+
+IVDRUG: History of injection drug use
+
+DRINKER: Alcohol drinking category
+
+HEPB: Hepatitis B surface antigen status (1=positive, 2=negative)
+
+HEPC: Hepatitis C virus status (1=positive, 2=negative)
+
+CRCL_BSL: Calculated creatinine clearance (mL/min/1.73m2)
+
+SEXPREF: Sex partner preference
+
+HOWSURE1: Sure take all/most of HIV meds
+
+HOWSURE2: Sure HIV meds have positive effect?
+
+HIVRNA: HIV-1 RNA (copies/ml)
+
+CD4: CD4+ cell count, closest to the visit window (cells/mm3)
+
+CD8: CD8+ cell count (cells/mm3)
+
+SBP: Systolic blood pressure (mmHg)
+
+EGFR_MDRD: Estimated glomerular filtration rate (mL/min/1.73m2)
+
+TRIGS: Fasting triglycerides (mg/dL)
+
+LDL: Fasting calc LDL-C (mg/dL)
+
+FPG: Fasting glucose (mg/dL)
+
+BMI: Body mass index (kg/m2)
+
+EVERSMOKER: Smoking history
+
+HEALTH: In general, would you say your health is?
+
+WGHTNOW: Think about your weight today, do you consider yourself to be?
+
+WGHTAGO: Thinking about your weight now and your weight a year ago, are
+you more or less worried about your weight than before?
+
+## Case Study \#2
+
+A Superiority of Viral Load Over CD4 Cell Count When Predicting
+Mortality in HIV patients On Therapy
+
+<https://doi.org/10.1186/s12879-019-3781-1>
+
+```{r}
+Case2 <- read.csv(file=paste0("Data/data_Case2.csv"), na.strings="", stringsAsFactors=TRUE)
+Case2$VL[which(Case2$VL<50)] <- 50  # if VL <50, set to 50, the lower limit
+Case2$VL[which(Case2$VL>500000)] <- 500000  # set to upper limit
+Case2 <- Case2 %>%  mutate(log10VL=log10(VL),
+      VLud=ifelse(VL<=50, 1, 0))  # indicator for undetectable VL
+
+# Baseline data
+Case2BL <- Case2 %>% filter(t==0) %>% droplevels()  # baseline data
+```
+
+SID: Participant identifier
+
+RxClass: HIV medication class combination
+
+NonAdhBL: Medication non-adherence status (0=adherent, 1=non-adherent)
+
+t: Time (years)
+
+Age: Age at enrollment (years)
+
+Sex: Sex (0=female, 1=male)
+
+Weight: Weight (kg)
+
+VL: HIV RNA (copies/mL)
+
+CD4: CD4 cell count (cells/mm3)
+
+Death: Indicator of participant death (0=no, 1=yes)
+
+# The Scientific Process
+
+1.  Observation/pattern
+
+2.  Research question
+
+3.  Hypothesis
+
+4.  Study design/data collection
+
+5.  Statistical analysis
+
+6.  Results/conclusion
+
+## Observation or Pattern
+
+**Case Study \#1**: Efavirenz, an NNRTI, and efavirenz-based
+combinations may not be suitable for some HIV-1 infected individuals.
+How do antiretrovirals that do not contain efavirenz compare in terms of
+long-term efficacy and tolerability?
+
+**Case Study \#2**: (Modified) Adherence to antiviral medications is
+vital. Is there a difference in HIV control between those who adhere to
+their medications and those who do not?
+
+------------------------------------------------------------------------
+
+## Research Question
+
+**Case Study \#1**: Efavirenz, an NNRTI, and efavirenz-based
+combinations may not be suitable for some HIV-1 infected individuals.
+[How do antiretrovirals that do not contain efavirenz compare in terms
+of long-term efficacy and tolerability?]{style="color: purple;"}
+
+**Case Study \#2**: Adherence to antiviral medications is vital. [Is
+there a difference in HIV control between those who adhere to their
+medications and those who do not?]{style="color: purple;"}
+
+------------------------------------------------------------------------
+
+## Primary Outcome and Hypotheses {.tabset}
+
+### Overview
+
+In its simplest form, a **research hypothesis** is a statement about
+what the results are thought to be.
+
+It's the **desired** answer to the research question.
+
+It must be stated in a certain way so that it is **testable**.
+
+Specifically, the research hypothesis must be stated in terms of the
+**primary outcome**.
+
+The primary outcome is a **specific characteristic** that is most
+suitable to answer the research question. It is
+
+1.  [measurable]{style="color: purple;"} -- a value can be computed for
+    every individual in the study
+2.  [clinically meaningful]{style="color: purple;"} -- a good proxy for
+    the clinical phenomenon under study
+3.  [of greatest importance]{style="color: purple;"} -- the
+    characteristic the researcher is most interested in
+
+The **statistical hypotheses** have two components (the null and
+alternative) and will be discussed in detail later.
+
+------------------------------------------------------------------------
+
+### Case Study \#1
+
+Efavirenz, an NNRTI, and efavirenz-based combinations may not be
+suitable for some HIV-1 infected individuals. How do antiretrovirals
+that do not contain efavirenz compare in terms of long-term **efficacy**
+and **tolerability?**
+
+**Primary Outcome**
+
+How can "efficacy" and "tolerability" be measured? It is usually up to
+the researcher who has the expertise to define the primary outcome in a
+clinically meaningful way.
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+**Efficacy**: virologic failure, defined as a confirmed HIV-1 RNA level
+greater than 1000 copies/mL at 16 ≤ weeks \<24 or greater than 200
+copies/mL at ≥ 24 weeks
+
+**Tolerability**: tolerability failure, defined as discontinuation of
+atazanavir, raltegravir, or darunavir for toxicity
+:::
+
+**Research Hypothesis**
+
+In broad terms, the desired answer to the research question is
+"antiretrovirals that do not contain efavirenz will be similar in terms
+of long-term efficacy and tolerability".
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+Antiretrovirals that do not contain efavirenz will be similar in terms
+of **virologic failure** and **tolerability failure**.
+:::
+
+------------------------------------------------------------------------
+
+### Case Study \#2
+
+Adherence to antiviral medications is vital. Is there a difference in
+**HIV control** between those who adhere to their medications and those
+who do not?
+
+**Primary Outcome**
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+**HIV control**: undetectable viral load, defined as \<50 copies/mL over
+follow-up
+:::
+
+**Research Hypothesis**
+
+The desired answer to the research question is "there is a difference in
+HIV control between those who adhere and those who do not".
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+There is a difference in **undetectable viral load** over follow-up
+between those who adhere and those who do not.
+:::
+
+------------------------------------------------------------------------
+
+## Study design/data collection
+
+### Population versus Sample
+
+The underlying principle of statistical reasoning and inference is to
+conceptualize a (target) population of all possible sampling units
+(observations). For example:
+
+1.  All treatment naive individuals living with HIV
+2.  All new HIV infections in 2020
+3.  All people within one hour driving distance to a particular hospital
+4.  Inpatient clinics of U.S. hospitals with at least 100 beds
+5.  All homes within a specific geographic region
+
+Due to potential cost and/or inability to identify all units, getting
+information on all members of the envisioned target population may be
+impossible. Focusing on only a subset or sample of them is why
+statistics are needed.
+
+![](Images/day1_img1.png)
+
+### Study Descriptions and Classifications {.tabset}
+
+#### Overview
+
+Appropriate terminology to describe a study is needed, which alerts the
+reader to what types of inferences are valid. For example:
+
+**Control over study environment:**
+
+1.  Experimental
+2.  Observational
+
+**Timing of study**:
+
+1.  Retrospective
+2.  Prospective
+
+**Measurement timing/spacing:**
+
+1.  Single observation in time/space
+2.  Longitudinal observations
+3.  Spatial observations
+
+**Blinded/double-blinded**
+
+These are common descriptors, but not the only possible ones.
+
+#### Control over Study Environment
+
+**Experiment study:** One in which the investigator **deliberately
+manipulates** the environment in which the participants exist. This can
+be by introducing something new (e.g., medicines, diet, training,
+monitoring devices) or altering what currently exists (e.g., changing
+the environment, increasing the dose of a medication). The goal is to
+study how the effects of the introduced change influence the primary
+outcome.
+
+**Observational study:** a "sit back and watch" type of study. Data are
+collected from an existing environment or database and collection of
+those data does not interfere with the system in place. Neither the
+individuals under study nor study variables of interest are manipulated
+in any way -- they are observed and measured as is.
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+**Case Study \#1**: "...Our study was a phase 3, randomized, open-label
+trial. Participants were followed, regardless of meeting an end point,
+for 96 weeks after enrollment of the final volunteer. They were randomly
+assigned in a 1:1:1 ratio to receive 1 of 3 regimens..."
+
+**Case Study \#2**: "...The data used in this study was obtained as
+secondary data from the University of Venda in South Africa...This study
+includes a selection of 320 HIV patients on anti-retroviral therapy
+(ART) who fulfilled the entry criteria from a longitudinal cohort of
+1092 HIV-infected patients followed at a Wellness clinic in Bela Bela,
+South Africa, from year 2005 to year 2009..."
+:::
+
+#### Timing of Study
+
+Since experimental studies require manipulation of the
+condition/treatments by the investigator, they are prospective studies.
+
+The terms "prospective" and "retrospective" are applied to observational
+studies.
+
+**Prospective:** The study is designed to collect data in the future.
+
+**Retrospective:** The study uses data collected in the past, and thus
+the information exists before the study is started (e.g., survey data,
+electronic health record, baseline data of a clinical trial).
+
+These terms refer to when the data were collected, not when the data
+occurred (e.g., "was there a television in your childhood home?" could
+be determined prospectively or retrospectively).
+
+#### Measurement Timing
+
+**Single Observation:** The study information is collected at one point
+in time on each sampling unit.
+
+**Longitudinal:** The study collects repeated information (same
+variables) on each sampling unit over time in order to measure change
+over time.
+
+**Spatial:** The study collects a set of variables in different
+locations on each sampling unit with an intent to determine if some
+geographic areas are different from others.
+
+For longitudinal and spatial studies, additional care must be taken to
+account for correlated measures.
+
+#### Blinding
+
+The term **single-blinded** in a study implies that the study
+participants are unaware of what study group they are in.
+
+The term **double-blinded** means that both the participants and those
+interacting with them are unaware of the study group assignments.
+
+**Triple-blinded** means that the people analyzing the data also do not
+know group assignments.
+
+Blinding may not always be possible (e.g., surgery vs. physical therapy)
+and such experiments are **unblinded**.
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+**Case Study \#1**: "...Our study was a phase 3, randomized,
+**open-label** trial. Participants were followed, regardless of meeting
+an end point, for 96 weeks after enrollment of the final volunteer. They
+were randomly assigned in a 1:1:1 ratio to receive 1 of 3 regimens..."
+:::
+
+### Common Types of Biomedical Studies {.tabset}
+
+#### Overview
+
+**Observational Studies**
+
+1.  Cohort study
+2.  Case-control study
+3.  Cross-sectional study
+
+**Experimental Studies**
+
+1.  Clinical trials
+2.  Pragmatic trials
+3.  Lab experiments
+4.  Randomized designed studies (e.g., completely randomized design,
+    cross-over design, factorial design, partial factorial, nested,
+    blocked designs, etc.)
+
+These are "textbook" definitions of these types of studies. In practice
+these terms will often overlap. For example, cohort studies can be
+retrospective. Case-control studies can be prospective (e.g., cases are
+enrolled on a rolling basis), either can be cross-sectional.
+
+#### Observational Studies
+
+<u>**Cohort Study: Exposure-based Sampling**</u>
+
+**Cohort:** a group of individuals who belong to the same group, and
+will never belong to a different group. The definition of a cohort must
+be clearly and permanently defined.
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+**Case Study \#2**: "...The data used in this study was obtained as
+secondary data from the University of Venda in South Africa...This study
+includes a selection of 320 HIV patients on anti-retroviral therapy
+(ART) who fulfilled the entry criteria from **a longitudinal cohort of
+1092 HIV-infected patients followed at a Wellness clinic in Bela Bela,
+South Africa, from year 2005 to year 2009**..."
+:::
+
+**Cohort study**: an (often prospective) observational study in which a
+random sample of individuals exposed to a risk factor ("exposed cohort")
+and a random sample of comparable individuals not exposed are followed
+over time and disease status is recorded (e.g., development of HIV or
+not).
+
+------------------------------------------------------------------------
+
+<u>**Case-Control Study: Outcome-based sampling**</u>
+
+**Cases:** a cohort of people selected from the population who meet some
+criteria (e.g., have a disease/condition) that could be related to one
+or more risk factors.
+
+**Controls:** a cohort of people selected from the population who do not
+meet the criteria, but are as similar to the cases as possible in all
+other respects.
+
+**Case-control study:** an (often retrospective) observational study in
+which the people are selected from those falling into the categories of
+the outcome (e.g., those with or without disease) to determine who
+have/had risk factor(s) and who do/did not.
+
+Controls can be matched to cases based on characteristics like age, sex,
+presence/absence of comorbidities, etc. to make groups as similar as
+possible. A weak design to assess causality, but sometimes the only
+possible approach.
+
+------------------------------------------------------------------------
+
+<u>**Cross-Sectional Study**</u>
+
+**Cross-sectional study**: an observational study in which data are
+collected on sampling units at only one point in time. This design can
+be used to:
+
+-   Describe the characteristics of a population at one point in time.
+-   Measure prevalence of a characteristic or disease of interest at a
+    point in time.
+-   Look for associations with other sampling unit characteristics.
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+Analysis of either Case \#1 or Case \#2 at a single time point.
+:::
+
+#### Experimental Studies
+
+<u>**Clinical Trials**</u>
+
+Prospective experiment, involving humans or animals, to study safety and
+efficacy of new "treatments" (drugs, interventions, diets, training,
+etc.).
+
+They can be randomized or not. If randomized, participants are assigned
+to two or more study groups or "arms". This is to ensure that the groups
+are the same, except with respect to the experimental treatment.
+
+Usually collects multiple measures over time to monitor safety and
+assess efficacy.
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+**Case Study \#1:** "...Our study was a phase 3, randomized, open-label
+trial. Participants were followed, regardless of meeting an end point,
+for 96 weeks after enrollment of the final volunteer. They were randomly
+assigned in a 1:1:1 ratio to receive 1 of 3 regimens..."
+:::
+
+<u>**Pragmatic Trials**</u>
+
+Similar to clinical trials except treatment effectiveness is determined
+in a more real-world setting with a broad variety of participants.
+
+<u>**Lab Experiments**</u>
+
+Experiments conducted in a lab that do not involve human subjects, so
+they investigator can have more control over other influences.
+Generally, they involve a relatively small number of sampling units, and
+can be completed relatively quickly.
+
+<u>**Randomized Designed Studies**</u>
+
+A general term for any study that has randomization. There are many
+types (and combination of types) of study designs that cannot be covered
+here. It's important to discuss study design with someone trained in
+this area before collecting data!
+
+#### Experimental or Observational Study?
+
+**Advantages of Experimental Studies**
+
+-   Strong design for showing causality (considered "gold-standard")
+-   Prospective nature gives researchers control over what data are
+    collected
+-   Usually do not suffer from confounding effects of other variables
+
+**Disadvantages of Experimental Studies**
+
+-   Often very expensive to implement, especially clinical trials
+-   Can take a long time to complete
+-   Subject to missing data, dropout of participants
+-   Potentially restricts inferences due to strict inclusion/exclusion
+    criteria; less applicable to the general population
+
+**Advantages of Observational Studies**
+
+-   Can discover long term relationships between exposures and outcomes
+-   Retrospective studies tend to be cheaper and faster, since data
+    already exist somewhere
+-   Can study rare exposures in cohort studies and rare outcomes in
+    case-control studies
+
+**Disadvantages of Observational Studies**
+
+-   Association, not causation
+-   Measures of interest may not be available in retrospective databases
+-   Confounding is often a concern in observational studies
+-   Also subject to missing data
+
+### Sampling Techniques-- Choosing Participants
+
+How the sample is drawn will affect what types of conclusions can be
+made, and the analysis methods will often have to be adjusted to reflect
+the sampling.
+
+**Simple Random Sample:** A simple random sample is one where each
+person in the population has the same probability of being selected into
+the sample. The most common type of sampling.
+
+**Stratified Random Sampling:** The population is partitioned into
+strata and within all strata, a simple random sample is taken.
+
+**Cluster Sampling:** The population is partitioned into clusters.
+Randomly sample a subset of the clusters and either measure all members
+of the cluster (one-stage) or take a simple random sample within the
+chosen clusters (two-stage).
+
+# Exercises: Scientific Process {.tabset}
+
+Below are exercises to reinforce concepts in the lecture part of the
+workshop. Clicking the "code" button displays the answers.
+
+## Question 1
+
+The Jackson Heart Study (JHS, <https://www.jacksonheartstudy.org/>) is a
+prospective cohort study of 5306 black Americans 21-94 years of age at
+enrollment from the tricounty (Hinds, Madison, and Rankin) area of the
+Jackson, MS. The primary outcome of JHS is adjudicated cardiovascular
+events (hear failure, stroke, or myocardial infarction) and participants
+were follow for about 8 years to determine if they experienced an event.
+Baseline data were collected from 2000-2004 and included demographic
+information, survey responses, and clinical measurements.
+
+Researchers at Duke used baseline survey responses from JHS to determine
+if there was an association between the amount of time since a
+participant's last routine physical and their perceived trust in
+healthcare providers. Those with missing data on measures of interested
+were excluded.
+
+1.  What is the research question of the Duke study?
+
+```{r}
+# is there an association between perceived trust and time since last physical?
+```
+
+2.  What is the primary outcome of the Duke study?
+
+```{r}
+# time since last routine physical
+```
+
+3.  Is the Duke study prospective or retrospective?
+
+```{r}
+# Retrospective – the baseline data have already been collected
+```
+
+## Question 2
+
+Below is a excerpt from an article: <br>
+
+Background: Low potassium has been identified as a risk factor for type
+2 diabetes. Low potassium could be a potentially modifiable risk factor,
+particularly for African Americans.
+
+Objective: We sought to determine the effects of potassium chloride
+(KCl) supplements, at a commonly prescribed dose, on measures of glucose
+metabolism.
+
+Design: Among African-American adults with prediabetes, we conducted a
+double-blinded pilot randomized controlled trial that compared the
+effects of 40 mEq K/d as KCl supplements with a matching placebo on 2-h
+change in glucose AUC measured from oral-glucose-tolerance tests
+(OGTTs).
+
+The principal investigator performed chart reviews of the electronic
+medical records of patients from participating Duke primary care clinics
+who had been seen in clinic in the previous 12 mo. To be eligible for
+this study, participants had to be African American by self-reported
+race, aged \>=30 y, and have [prediabetes]. [Enrolled] participants
+underwent a 3 hour 75-g oral-glucose-tolerance test (OGTT). After
+completion of the OGTT, participants were...randomly assigned...to
+receive either KCl or placebo.
+
+<https://doi.org/10.3945/ajcn.117.161570>
+
+1.  Is this a prospective or retrospective study?
+
+```{r}
+# It’s an RCT (experimental study) which, by definition, is prospective
+```
+
+2.  Describe the population from which the sample was drawn.
+
+```{r}
+# African American patients aged 30 years or older at Duke primary care clinics who had prediabetes.
+```
+
+3.  What is the primary outcome of the study?
+
+```{r}
+# glucose metabolism (2-h change in glucose AUC)
+```
+
+## Question 3
+
+Below is a excerpt from an article: <br>
+
+Nothing is known about peripheral levels of serotonin (5-HT) in SIDS
+infants. In the current study, we address this issue by analyzing serum
+5-HT levels, a peripheral marker of 5-HT metabolism, in SIDS cases
+compared with autopsy controls. This information may provide insight
+into the extent of defective 5-HT pathology in SIDS: whether it is a
+generalized disorder of 5-HT metabolism, and if measures of serum 5-HT
+could ultimately be used as a biomarker of 5-HT peripheral and central
+abnormalities in autopsied infants, as well as living infants at risk
+for sudden death due to central 5-HT defects. We specifically
+hypothesized that serum 5-HT levels are altered in SIDS cases compared
+with infants dying of known causes. A cohort of SIDS cases (n = 61) and
+autopsied control infants (n = 15) was accrued from 2007 to 2013 in
+collaboration with the San Diego Office of the Medical Examiner in San
+Diego County, CA. Serum was available for research under the auspices of
+California Law Chapter 955, Statutes of 1989 (SB 1069). The case and
+control adjudications were based upon autopsy reports, clinical
+information, and death scene investigations, and were performed blinded
+to serum 5-HT values. In this study, all SIDS cases, classified
+according to the National Institute of Child Health and Human
+Development classification of SIDS (1), were sudden, unexpected deaths
+of infants under 1 y of age that remained unexplained after a complete
+autopsy and death scene investigation (1). The controls consisted of
+seemingly healthy infants who died of definable acute disorders with no
+or only minor signs of clinical illness within 1 wk of death..."
+
+<https://doi.org/10.1073/pnas.161737411>
+
+1.  What type of sampling technique was used in this study
+    (outcome-based, exposure-based, both, or neither)? Is this a
+    prospective or retrospective study?
+
+```{r}
+# This is a case-control study, so sampling is outcome based.
+# This is a retrospective study since the data exist in a database.
+```
+
+2.  Describe the population from which the study sample of $n=76$ was
+    drawn.
+
+```{r}
+# Infants (<1 year) who died between 2007 to 2013 in San Diego County, CA
+```
+
+3.  What is the primary outcome of the study?
+
+```{r}
+# SIDS (indicator function)
+```
+
+# Data Types and Summary Statistics
+
+## Common Data Practices
+
+Once data are collected, it is always a good idea to examine the data
+before analyzing it.
+
+-   Summary statistics
+-   Graphical displays
+
+Simple knowledge of what values are reasonable and how the measures were
+collected is of great value:
+
+-   A missing response could be coded as "999" or "-999" or some other
+    number, instead of a blank
+-   Is a systolic blood pressure reading of 350 mmHg possible?
+
+Sometimes, the most unusual measurements tell you the most! Be careful
+about just discarding them.
+
+**Numeric Presentations**
+
+-   Summarizing data using measures of "central location" and "spread"
+-   Knowing which measures of location and spread are appropriate for
+    different data types
+
+**Graphical Presentations**
+
+-   Visualizing data through graphs and plots
+
+-   Knowing how to summarize and display data starts with the
+    understanding the type of data collected.
+
+    -   Categorical (binary, nominal, ordinal)
+    -   Quantitative (interval or ratio)
+
+------------------------------------------------------------------------
+
+## Data Types {.tabset}
+
+### Categorical Data
+
+Just as the name implies: data are groups or classes (categories). There
+are 3 categorical data types:
+
+1.  Binary: only two values are possible, and these two cover all
+    possibilities.
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+Virologic failure (yes/no); sex (male/female); HCV test result
+(reactive/non-reactive)
+:::
+
+2.  Nominal: values are unordered groups for which there is no natural
+    ordering.
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+Randomization arm (1, 2, 3); race; HIV drug class (NRTI, NNRTI, PI,
+II...)
+:::
+
+3.  Ordinal: values recorded are categorized in a natural ordering.
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+Likert scales (not at all sure, somewhat sure, very sure, extremely
+sure) HIV RNA (\<10,000 copies, 10,000 to \<100,000 copies, 100,000
+copies or more)
+:::
+
+**Caution!** when recording categorical data, numerical values may be
+assigned (e.g., 1=Yes, 0=no, -999=no answer).
+
+------------------------------------------------------------------------
+
+### Quantitative Data
+
+Values recorded are measured on a scale or continuum. There are 2
+quantitative data types:
+
+1.  Discrete: possible values are isolated (a "countable" set of
+    values).
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+Hospital readmissions after initial discharge (0, 1, 2, ...); ratings
+("On a scale from 0 to 10, how satisfied are you with your current HIV
+doctor?")
+:::
+
+2.  Continuous: theoretically, a value always exists between any two
+    given numbers, (an "uncountable" set of values).
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+Age; BMI; viral load; CD4 count; SBP; eGFR; A1C...
+:::
+
+**Caution!** There will be a limit to measurement accuracy (e.g., age
+might be whole numbers only), but conceptually, there will always be
+numbers between any two observed values.
+
+**Further:** continuous data can be **interval** or **ratio** data.
+
+------------------------------------------------------------------------
+
+### Case \#1
+
+```{r}
+summary(Case1BL)
+```
+
+------------------------------------------------------------------------
+
+### Case \#2
+
+```{r}
+summary(Case2BL)
+```
+
+------------------------------------------------------------------------
+
+## Numerical Summaries
+
+Any value computed or determined from the data in the sample is a sample
+statistic (mean, minimum value, percentile...)
+
+The focus will be on measures of central tendency: **mean, median**, and
+measures of spread: **variance, standard deviation, IQR**.
+
+#### Data Values Syntax
+
+The sample size will be denoted by $n$. Realizations of data values in
+the sample will be denoted by lower case letters (generally $x$ or $y$):
+$y_1$, $y_2$, ..., $y_n$.
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+Example: Suppose we sampled 5 individuals with HIV (from some population
+of interest -- e.g., treatment naive) and measured their CD4 counts.
+Then $n=5$. The sample is $y_1=194$, $y_2=87$, $y_3=385$, $y_4=241$,
+$y_5=37$
+
+```{r results='hide'}
+CD4 <-c(194, 87, 385, 241, 37)
+CD4
+```
+
+Case \#1: LDL cholesterol among $n=300$ are $y_1=86.0$, $y_2=131.8$,
+..., $y_{300}=123.2$
+
+```{r results='hide'}
+head(Case1BL$LDL);  tail(Case1BL$LDL)
+```
+
+Case \#2: log10 HIV RNA among $n=320$ are $y_1=$NA, $y_2=2.602$, ...,
+$y_{320}=4.491$
+
+```{r results='hide'}
+head(Case2BL$log10VL); tail(Case2BL$log10VL)
+```
+:::
+
+#### Order Statistics
+
+Order statistics are the sample data sorted from smallest to largest.
+
+$$y_1, y_2, ..., y_n$$ The subscript in parentheses ($i$) implies the
+"$i$th smallest".
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+Example: The order statistics of the sample of CD4 counts are
+
+$$y_{(1)} = 37, y_{(2)} = 87, y_{(3)} = 194, y_{(4)} = 241, y_{(5)} = 385$$
+
+```{r results='hide'}
+sort(CD4)
+```
+
+Case \#1: the order statistics for LDL cholesterol are
+
+$$y_{(1)} = 13.2, y_{(2)} = 18.8, y_{(3)} = 19.4, ... , y_{(300)} = 191.8$$
+
+```{r results='hide'}
+sort(Case1BL$LDL)
+```
+
+Case \#2: the order statistics for log10 HIV RNA
+
+$$y_{(1)} = 1.699, y_{(2)} = 1.699, y_{(3)} = 1.748, ..., y_{(320)} = 5.699$$
+
+```{r results='hide'}
+sort(Case2BL$log10VL)
+```
+:::
+
+------------------------------------------------------------------------
+
+## Measures of Central Location {.tabset}
+
+### Arithmetic Mean
+
+**Arithmetic mean:** The average of all $n$ observations in the sample,
+denoted as $\bar{y}$
+
+$$ \bar{y} = \frac{y_1 + y_2 + \cdots +y_n }{n} = \frac{1}{n} \sum_{i=1}^{n} y_i $$
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+For the CD4 sample:
+
+$$\bar{y} = \frac{(194 + 87 + 385 + 241 + 37)}{5} = \frac{944}{5} = 188.8$$
+
+```{r}
+mean(CD4)
+```
+
+Case \#1: the mean LDL is $\bar{y}=91.46$
+
+```{r}
+mean(Case1BL$LDL, na.rm=TRUE)
+```
+
+Case \#2: the mean log10 HIV RNA is $\bar{y} =4.795$
+
+```{r}
+mean(Case2BL$log10VL, na.rm=TRUE)
+```
+:::
+
+### Median
+
+**Median:** The middle number of the order statistics if $n$ is odd. The
+mean of the two middle numbers of the order statistics if $n$ is even.
+Half of the sample is below the median and half is above. Denoted by
+$m$.
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+For the CD4 example, the order statistics were 37, 87, 194, 241, 385.
+What is the median?
+
+```{r results='hide'}
+median(CD4)
+```
+
+Suppose $n=4$ and the order statistics were 37, 87, 194, 241. Then the
+median would be $(87+194)⁄2=140.5$.
+
+```{r}
+median(CD4[-3])
+```
+
+Case \#1: the median LDL is 91.8.
+
+```{r}
+median(Case1BL$LDL, na.rm=TRUE)
+```
+
+Case \#2: the median log10 HIV RNA is 4.912.
+
+```{r results='hide'}
+median(Case2BL$log10VL, na.rm=TRUE)
+```
+:::
+
+### Choosing a Measure of Central Location
+
+**Categorical Data:** generally summarized by presenting the count and
+percent of sampling units falling in each category.
+
+**Continuous Data:** Mean or median -- which one is preferred depends on
+the shape of the data/distribution.
+
+**Symmetric Distributions**
+
+The mean and median are approximately the same; use either one (mean is
+more common).
+
+```{r}
+set.seed(1)
+
+### Beta(0.5, 0.5)
+
+beta_55_1 <- seq(0.01,0.99, l=1000)
+dbeta_55_1 <- dbeta(beta_55_1, 0.5, 0.5)
+beta_55_df_1 <- as.data.frame(cbind(beta_55_1, dbeta_55_1))
+
+a <- ggplot(beta_55_df_1,aes(x=beta_55_1,y=dbeta_55_1)) + 
+  geom_point(color="blue") +
+  labs(title = "Beta(0.5, 0.5)") +
+  xlab("Observed X") + ylab("PDF(X)")+
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+beta_55_2 <- rbeta(300, shape1=0.5, shape2=0.5)
+beta_55_df_2 <- as.data.frame(beta_55_2) %>% 
+  rename(beta_55_2 = 1)
+
+b <- ggplot(beta_55_df_2 , aes(x=beta_55_2 ))+
+  geom_histogram(bins = 20,colour="black", fill="white")+
+  labs(title = "Histogram of Beta(0.5, 0.5)") +
+  xlab("Observed X") +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+c <- ggplot(beta_55_df_2, aes(y=beta_55_2))+
+  geom_boxplot()+
+  labs(title = "Boxplot of Beta(0.5, 0.5)") +
+  ylab("Observed X") +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+### N(0,1)
+
+n_01 <- seq(-3.5, 3.5, l=1000)
+norm_01 <- sort(rnorm(1000))
+norm_01_df <- as.data.frame(norm_01)
+  
+d <- ggplot(norm_01_df,aes(x=norm_01)) + 
+  geom_density(color="blue", size=2) + 
+  labs(title = "N(0, 1)") +
+  xlab("Observed X") + ylab("PDF(X)")+
+  xlim(-4,4) + 
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+e <- ggplot(norm_01_df, aes(x=norm_01))+
+  geom_histogram(bins = 20,colour="black", fill="white")+
+  labs(title = "Histogram of N(0, 1)") +
+  xlab("Observed X") + xlim(-4,4) +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+f <- ggplot(norm_01_df, aes(y=norm_01))+
+  geom_boxplot() +
+  labs(title = "Boxplot of N(0, 1)") +
+  ylab("Observed X") +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+### t(1)  
+t1 <- seq(-5, 5, l=1000)
+stut <- data.frame(sort(rt(n=1000, df=1))) %>% 
+  rename(stut = 1)  
+t1_df <- data.frame(cbind(t1, dt(t1, df=1), stut)) %>% 
+  rename(dt_t1 = 2)
+
+g <- ggplot(t1_df,aes(x=t1, y=dt_t1)) + 
+  geom_point(color="blue") + 
+  labs(title = "t(df=1)") +
+  xlab("Observed X") + ylab("PDF(X)")+
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+h <- t1_df %>% 
+  filter(stut >= -5 & stut <= 5) %>% # remove the outliers for easy plotting
+  ggplot(aes(x=stut))+geom_histogram(bins = 20,colour="black", fill="white")+
+  labs(title = "Histogram of t(df=1)") +
+  xlab("Observed X") +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+i <- ggplot(t1_df, aes(y=stut))+
+  geom_boxplot()+
+  labs(title = "Boxplot of t(df=1)") +
+  ylab("Observed X") +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+cowplot::plot_grid(a,b,c,d,e,f,g,h,i)
+```
+
+**Asymmetric distributions:** When the shape is skewed, more extreme
+values are expected in one direction (right/above or left/below the
+mean), but not the other.
+
+```{r}
+set.seed(1)
+
+### Chisq(df=3)  
+chi_seq <- seq(0,15, l=1000)
+chisq <- sort(rchisq(1000, df=3))
+dchisq <- dchisq(chi_seq, df=3)
+chisq_df <- data.frame(cbind(chi_seq, chisq, dchisq))
+
+j <- ggplot(chisq_df,aes(x=chi_seq,y=dchisq)) + 
+  geom_point(color="blue") +
+  labs(title = "Chisq(df=3)") +
+  xlab("Observed X") + ylab("PDF(X)")+
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+k <- ggplot(chisq_df, aes(x=chisq))+
+  geom_histogram(bins = 20,colour="black", fill="white")+
+  labs(title = "Histogram of Chisq(df=3)") +
+  xlab("Observed X") +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+l <- ggplot(chisq_df, aes(y=chisq))+
+  geom_boxplot()+
+  labs(title = "Boxplot of Chisq(df=3)") +
+  ylab("Observed X") +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+### Exp(1)
+exp_seq <- seq(0,7,l=1000) # Note. You can't call this "exp" because that's a built-in function
+rexp <- sort(rexp(1000))
+dexp <- dexp(exp_seq)
+exp_df <- data.frame(cbind(exp_seq, rexp, dexp))
+
+m <- ggplot(exp_df,aes(x=exp_seq,y=dexp)) + 
+  geom_point(color="blue") +
+  labs(title = "Exp(1)") +
+  xlab("Observed X") + ylab("PDF(X)")+
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+n <- ggplot(exp_df, aes(x=rexp))+
+  geom_histogram(bins = 20,colour="black", fill="white")+
+  labs(title = "Histogram of Exp(1)") +
+  xlab("Observed X") +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+o <- ggplot(exp_df, aes(y=rexp))+
+  geom_boxplot()+
+  labs(title = "Boxplot of Exp(1)") +
+  ylab("Observed X") +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+### Beta(6, 2)  
+beta_62_seq <- seq(0.2, 1, l=1000)
+rbeta_62 <- sort(rbeta(1000, shape1=6, shape2=2))
+dbeta_62 <- dbeta(beta_62_seq, 6, 2)
+beta_62_df <- data.frame(cbind(beta_62_seq, rbeta_62, dbeta_62))
+
+p <- ggplot(beta_62_df,aes(x=beta_62_seq,y=dbeta_62)) + 
+  geom_point(color="blue") +
+  labs(title = "Beta(6, 2)") +
+  xlab("Observed X") + ylab("PDF(X)")+
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+q <- ggplot(beta_62_df, aes(x=rbeta_62))+
+  geom_histogram(bins = 20,colour="black", fill="white")+
+  labs(title = "Histogram of Beta(6, 2)") +
+  xlab("Observed X") +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+r <- ggplot(beta_62_df, aes(y=rbeta_62))+
+  geom_boxplot()+
+  labs(title = "Boxplot of Beta(6, 2)") +
+  ylab("Observed X") +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+cowplot::plot_grid(j,k,l,m,n,o,p,q,r)
+```
+
+The first two distributions are "right-skewed" or "positively skewed",
+because the "tail" of the distribution extends to the right of the graph
+(towards larger numbers).
+
+The last distribution is "left-skewed" or "negatively skewed" because
+the "tail" of the distribution extends to the left of the graph (towards
+smaller numbers).
+
+In a right-skewed distribution, the mean is higher than median. In a
+left-skewed distribution, the mean is lower than the median.
+
+```{r}
+beta_26_seq <- seq(0, 1, l=1000)
+rbeta_26 <- sort(rbeta(1000, shape1=2, shape2=6))
+dbeta_26 <- dbeta(beta_26_seq, 2, 6)
+beta_26_df <- data.frame(cbind(beta_26_seq, rbeta_26, dbeta_26))
+
+# get mode for this plot
+# note that R's mode() function doesn't compute the mode of the set of numbers
+s_mode <-  beta_26_df %>% filter(dbeta_26 == max(dbeta_26)) %>% select(beta_26_seq) %>% as.numeric()
+
+s <- ggplot(beta_26_df,aes(x=beta_26_seq,y=dbeta_26)) + 
+  geom_point(color="black") +
+  geom_vline(aes(xintercept=mean(rbeta_26), color="Mean")) + 
+  geom_vline(aes(xintercept=median(rbeta_26), color="Median")) + 
+  geom_vline(aes(xintercept=s_mode, color="Mode")) + 
+  labs(title = "Beta(2, 6)") +
+  xlab("Observed X") + ylab("PDF(X)")+
+  scale_color_manual(name = "statistics", values = c(Median = "blue", Mean = "darkred", Mode="pink")) + 
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+# get mode for this plot
+# note that R's mode() function doesn't compute the mode of the set of numbers
+t_mode <-  beta_62_df %>% filter(dbeta_62 == max(dbeta_62)) %>% select(beta_62_seq) %>% as.numeric()
+
+t <- ggplot(beta_62_df,aes(x=beta_62_seq,y=dbeta_62)) + 
+  geom_point(color="black") +
+  geom_vline(aes(xintercept=mean(rbeta_62), color="Mean")) + 
+  geom_vline(aes(xintercept=median(rbeta_62), color="Median")) + 
+  geom_vline(aes(xintercept=t_mode, color="Mode")) + 
+  labs(title = "Beta(6, 2)") +
+  xlab("Observed X") + ylab("PDF(X)")+
+  scale_color_manual(name = "statistics", values = c(Median = "blue", Mean = "darkred", Mode="pink")) + 
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+plot_grid(s,t)
+```
+
+The more highly skewed, the more reason to use the median rather than
+the mean as a measure of center.
+
+------------------------------------------------------------------------
+
+## Measures of Spread {.tabset}
+
+### Sample Variance
+
+The average of the squared deviations of each datum value from the mean,
+denoted by $s^2$.
+
+$$s^2 = \frac{(y_1 - \bar{y})^2 + (y_2 - \bar{y})^2 + \cdots + (y_n - \bar{y})^2}{n-1} = \frac{1}{n-1}\sum_{i=1}^{n} (y_i - \bar{y})^2$$
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+The example CD4 sample was 194, 87, 385, 241, 37. The mean was 188.8.
+$$ s^2=\frac{(194-188.8)^2+(87-188.8)^2+\cdots+(37-188.8)^2}{5-1}=18663.2 $$
+
+```{r}
+var(CD4)
+```
+
+Case \#1: the sample variance of LDL is $s^2=948.20$
+
+```{r}
+var(Case1BL$LDL, na.rm=TRUE)
+```
+
+Case \#2: the sample variance of log10 HIV RNA is $s^2=0.601$
+
+```{r}
+var(Case2BL$log10VL, na.rm=TRUE)
+```
+:::
+
+### Sample Standard Deviation
+
+The standard deviation is the non-negative square root of the variance,
+$s=\sqrt{s^2}$.
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+The example CD4 sample variance was 18663.2.$s= \sqrt{18663.2} =136.61$
+
+```{r}
+sd(CD4)
+```
+
+Case \#1: the sample standard deviation of LDL is $s=30.79$
+
+```{r}
+sd(Case1BL$LDL, na.rm=TRUE)
+```
+
+Case \#2: the sample standard deviation of log10 HIV RNA is $s=0.775$.
+
+```{r}
+sd(Case2BL$log10VL, na.rm=TRUE)
+```
+:::
+
+### Interquartile Range (IQR)
+
+The $(100 \times p)$th percentile of the data is the value in which
+$100\times p$ percent of the data is less than or equal to this value,
+and $100\times (1-p)$ percent is above this value. Denoted as $q_p$.
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+Example: Let $p=0.1$. The 10th percentile is the number ($q_p$) in which
+10% of the data is less than or equal to this value, and 90% of the data
+is above this value.
+
+Suppose the order statistics for a sample of $n=10$ are 12, 13, 15, 15,
+16, 17, 20, 33, 36, 38.
+
+Then broadly, the 10th percentile would be any number in the interval
+$[12, 13)$. For example $q_{0.1}=12.5$.
+:::
+
+The IQR is the distance between the 25th and 75th percentile of the
+data.
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+For the CD4 data, the order statistics were 37, 87, 194, 241, 385. The
+25th percentile is 87. The 75th percentile is 241. The IQR is
+$241-87 = 154$.
+
+```{r}
+quantile(CD4, probs=c(0.25, 0.75))
+IQR(CD4)
+```
+
+Case \#1: The 25th percentile is 68.8. The 75th percentile is 111.8. The
+IQR is 43.
+
+```{r}
+quantile(Case1BL$LDL, probs=c(0.25, 0.75), na.rm=TRUE)
+IQR(Case1BL$LDL, na.rm=TRUE)
+```
+
+Case \#2: The 25th percentile is 4.443. The 75th percentile is 5.358.
+The IQR is 0.915.
+
+```{r}
+quantile(Case2BL$log10VL, probs=c(0.25, 0.75), na.rm=TRUE)
+IQR(Case2BL$log10VL, na.rm=TRUE)
+```
+:::
+
+Note: Often reported as [$q_{.25},q_{.75}$] instead of the distance.
+
+### Choosing a Measure of Spread Use
+
+-   Variance and standard deviation are highly sensitive to outliers and
+    skewed data so use when data are near-symmetric.
+-   Since the standard deviation/variance is a measure of spread around
+    the mean, it should only be used when the mean is used to capture
+    the center of the data (not with median or mode).
+-   IQR is "robust" to outliers; also use (along with the median) when
+    data are skewed.
+
+# Exercises: Data Types and Summary Statistics {.tabset}
+
+Clicking the "code" button displays the answers.
+
+## Question 1
+
+Read in the "data_Case1.csv" dataset. For now, we will just look at
+baseline data, so subset the data to only include baseline values
+(week=0).
+
+```{r, echo=FALSE}
+Case1 <- read.csv(file="Data/data_Case1.csv", na.strings="", stringsAsFactors=TRUE)
+# Baseline data
+Case1BL <- Case1 %>% filter(week==0) %>% droplevels()
+# summary(Case1);  # summary(Case1BL)
+```
+
+1.  Do the data appear to be "tidy"?
+
+```{r}
+# Data are pretty clean and tidy.
+```
+
+2.  How many individuals are there? How many variables are in the data?
+    How many individuals have a positive HBsAg status?
+
+```{r, echo=TRUE, results="hide"}
+Case1BL %>% summarise(unique=n_distinct((ntisid)))  # 300 individuals
+dim_desc(Case1BL)  # 31 variables in the data
+addmargins(table(Case1BL$hepb, exclude=NULL))  # 10 HBsAg positive
+# length(unique(Case1BL$ntisid))  # how many individuals
+# dim(Case1BL)                    # how many variables in the data
+```
+
+3.  Take a simple random sample without replacement of size 100 from the
+    baseline data. Be sure to set a seed so that the results can be
+    replicated. In the sample, how many individuals had positive HBsAg
+    status?
+
+```{r, echo=TRUE, results="hide"}
+set.seed(2107)
+BLsub <- Case1BL %>% sample_n(size=100, replace=FALSE)
+dim(BLsub)  # check
+addmargins(table(BLsub$hepb, exclude=NULL))  # 1 had positive HBsAg status
+```
+
+4.  When the outcome is extremely rare (e.g., positive HBsAg status), is
+    it better to perform a cohort study or a case-control study?
+
+```{r}
+# case-control
+```
+
+## Question 2
+
+For the following variables, for which ones are the mean and median
+meaningful values?
+
+a.  ntisid
+
+b.  week
+
+c.  Arm
+
+d.  age
+
+e.  sex
+
+f.  race
+
+g.  aids_dx
+
+h.  hivRNA
+
+i.  CD4
+
+j.  eGFR_mdrd
+
+k.  trigs
+
+l.  LDL
+
+m.  FPG
+
+```{r}
+#    a. ntisid - NO
+#    b. week - NO (the is BL data so week=0 for everyone)
+#    c. Arm - NO
+#    d. age - YES
+#    e. sex - if coded as 0/1, then MEAN is meaningful
+#    f. race - NO
+#    g. aids_dx - if coded as 0/1, then MEAN is meaningful
+#    h. hivRNA - YES
+#    i. CD4 - YES
+#    j. eGFR_mdrd - YES
+#    k. trigs - YES
+#    l. LDL - YES
+#    m. FPG - YES
+```
+
+# Graphical Summaries {.tabset}
+
+## Bar Plots for Categorical Data
+
+A bar plot is a common way to graphically show the frequency (count) or
+relative frequency (%) of data observed in different nominal or ordinal
+categories.
+
+-   Characterized by spaces between bars
+
+-   Height of the bar represents count or % of total
+
+-   Width of bars must be the same
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+**Case 1**: Mode of HIV transmission
+
+```{r}
+ModeT <- Case1BL %>%
+  select(ntisid, modeT) %>%
+  drop_na() %>% 
+  droplevels() 
+ModeT %>%  datatable()
+```
+
+```{r, fig.width=6}
+plot_by_count <- ModeT %>% 
+  group_by(modeT) %>% 
+  count() %>% 
+  ggplot(aes(reorder(modeT, -n), n)) +
+    geom_col(fill="grey", color="black") + 
+    geom_text(aes(label=n), hjust=-0.1) + 
+    labs(x="Mode of Transmission",
+         y="Frequency (N)",
+         title="Counts of Participants by Transmission") + 
+    coord_flip() + 
+    theme_bw() 
+plot_by_count
+```
+
+```{r}
+plot_by_percentage <- ModeT %>% 
+  group_by(modeT) %>% 
+  summarise(n = n()) %>% 
+  mutate(percentage = round((n/sum(n))*100, 1)) %>%
+  ggplot(aes(reorder(modeT, -percentage), percentage)) +
+    geom_col(fill="grey", color="black") + 
+    geom_text(aes(label=percentage), hjust=-0.1) + 
+    labs(x="Mode of Transmission",
+         y="Frequency (%)",
+         title="Counts of Participants by Transmission") +
+    coord_flip() + 
+    theme_bw() 
+plot_by_percentage
+```
+:::
+
+Above are two bar plots of the 283 participants with non-missing mode of
+transmission. The first is given by absolute counts, the second by
+percent.
+
+Here, we can quickly get a sense of the distribution of transmission
+categories.
+
+## Histograms for Quantitative Data
+
+A histogram is the continuous analog of a bar plot. It is a graphical
+representation of continuous data that has been split into fine
+categories.
+
+-   No spaces between the bars in a histogram
+-   Attention should be drawn to overall patterns (shape, center,
+    spread) and for deviations/outliers from this pattern
+-   Width of bars should be the same to ease visual interpretation
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+Case \#2: Baseline log10 viral load. Here, there were 3 missing values
+so n=317.
+
+```{r}
+# Plot all data as histogram
+c2_hiv_rna_hist <- Case2BL %>% 
+  ggplot(aes(log10VL)) + 
+    geom_histogram(fill="grey", color="black") + 
+  labs(x = "HIV RNA",
+       y = "Frequency",
+       title = "Histogram of log10 HIV RNA",
+       subtitle = "All values") + 
+  theme_bw()
+c2_hiv_rna_hist
+```
+
+```{r}
+c2_hiv_rna_hist <- Case2BL %>% 
+  mutate(Sex_label = if_else(Sex==0, "Female", "Male")) %>% 
+  ggplot(aes(log10VL)) + 
+    geom_histogram(fill="grey", color="black") + 
+    facet_wrap(~Sex_label) + 
+  labs(x = "HIV RNA",
+       y = "Frequency",
+       title = "Histogram of log10 HIV RNA",
+       subtitle = "All values") + 
+  theme_bw()
+c2_hiv_rna_hist
+```
+:::
+
+Above are histograms of HIV RNA, over all 317 observations, and grouped
+by sex.
+
+## Box Plots for Quantitative Data
+
+A box plot provides a graphical display of the median, 25th, and 75th
+percentiles of the data, along with extreme values (outliers).
+
+-   Box represents the 25th and 75th percentile; center line is the
+    median
+-   The "whiskers" represent observations within 1.5 times the IQR of
+    the data
+-   Values outside of 1.5 times the IQR are labeled as outliers.
+
+```{r}
+boxplot(Case1BL$LDL, cex.lab=1.2, cex.axis=1.2, lwd=2, cex=1.2,
+    cex.main=1.5, ylab="LDL",
+    main="Box Plot of LDL, Case #1")
+boxplot(LDL~Arm, data=Case1BL, cex.lab=1.2, cex.axis=1.2, lwd=2,
+    cex=1.2, cex.main=1.5, ylab="LDL", xlab="Arm",
+    main="Box Plot of LDL by Study Arm, Case #1")
+```
+
+Above are box plots of LDL over all observations and grouped by study
+arm.
+
+Should there be differences in LDL by study arm at baseline?
+
+```{r}
+boxplot(Case2BL$log10VL, cex.lab=1.2, cex.axis=1.2, lwd=2, cex=1.2,
+    cex.main=1.5, ylab="log10 HIV RNA",
+    main="Box Plot of HIV RNA, Case #2")
+boxplot(log10VL~Sex, data=Case2BL, cex.lab=1.2, cex.axis=1.2, lwd=2,
+    cex=1.2, cex.main=1.5, ylab="log10 HIV RNA", xlab="Sex",
+    main="Box Plot of HIV RNA by Sex, Case #2")
+```
+
+Above are box plots of log10 HIV RNA over all observations and grouped
+by sex.
+
+What pattern in HIV RNA can be seen in these plots?
+
+**Caution!** While box plots are helpful, they are not sufficient
+graphical summaries of data. They are limited by what characteristics
+can be displayed.
+
+```{r}
+set.seed(1)
+dat <- c(rnorm(1000, mean=0), rnorm(1000, mean=4.5))
+
+boxplot(dat, cex.lab=1.2, cex.axis=1.2, lwd=2, cex=1.2, cex.main=1.5,
+    ylab="Data Values", main="Box Plot of Bimodal Sample Data")
+hist(dat, freq=FALSE, col="grey80", xlab="Data Values", cex.lab=1.2,
+    cex.axis=1.2, cex.main=1.5, ylim=c(0,0.2),
+    main="Histogram of Bimodal Sample Data")
+  lines(density(dat), lwd=3, col=4)
+box()
+```
+
+A **violin plot** is an alternative; it displays the box plot in the
+center, but also displays a density curve -- a nonparametric estimate of
+the probability density function (PDF).
+
+```{r}
+vioplot(dat, cex.lab=1.2, cex.axis=1.2, cex=1.2, cex.main=1.5, col="grey80",
+    ylab="Data Values", names="",
+    main="Violin Plot of Bimodal Sample Data")
+```
+
+## Scatter Plot for Quantitative Data
+
+A scatterplot is used to graphically show the relationship between two
+quantitative variables that are "paired" to each other in some way.
+
+-   Data are paired values, where the x-axis gives the value of the
+    first measurement in the pair and the y-axis gives the value of the
+    second measurement in the pair
+-   Pairs usually consist of an independent variable (x: predictor,
+    exposure, explanatory variable,...) and a dependent variable (y:
+    response, outcome,...)
+-   Identify clusters, and direction and strength of the relationship
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+**Case \#1**: examine the relationship between age (x: independent
+variable) and LDL (y: dependent variable).
+
+```{r}
+case1_scatter <- Case1BL %>%
+  ggplot(aes(age, LDL)) + 
+    geom_point() + 
+    labs(x="Age (years)",
+         y="LDL (mg/dL)",
+         title="Age by LDL",
+         subtitle="Scatterplot") + 
+  theme_bw()
+case1_scatter
+```
+
+What trends can be seen?
+
+**Case \#2**: examine the relationship between weight (x: independent
+variable) and HIV RNA (y: dependent variable).
+
+```{r}
+# Clean up data frame
+case2_scatter <- Case2BL %>%
+  ggplot(aes(Weight, log10VL)) + 
+    geom_point() + 
+    labs(x="Weight (kg)",
+         y="log10 HIV RNA",
+         title="Weight by HIV RNA",
+         subtitle="Scatter plot") + 
+  theme_bw()
+
+case2_scatter
+```
+
+What trends can be seen?
+
+```{r}
+case2_scatter2 <- Case2BL %>%
+  mutate(Sex_Label = if_else(Sex==0, "Female", "Male")) %>%
+  ggplot(aes(Weight, log10VL, color=Sex_Label)) + 
+    geom_point() + 
+    scale_color_brewer(palette="Dark2") +
+    labs(x="Weight (kg)",
+         y="log10 HIV RNA",
+         title="Weight by HIV RNA",
+         subtitle="Scatter plot") + 
+  theme_bw()
+
+case2_scatter2
+```
+
+```{r}
+case2_scatter3 <- Case2BL %>%
+  mutate(Sex_Label = if_else(Sex==0, "Female", "Male")) %>%
+  ggplot(aes(Weight, log10VL, color=Sex_Label)) + 
+    geom_point() + 
+    geom_smooth(method="lm", se=FALSE) +
+    scale_color_brewer(palette="Dark2") +
+    labs(x="Weight (kg)",
+         y="log10 HIV RNA",
+         title="Weight by HIV RNA",
+         subtitle="Scatter plot") + 
+  theme_bw()
+
+case2_scatter3
+```
+:::
+
+## Matrix Plot for Quantitative Data
+
+A matrix plot is a series of scatter plots, showing bivariate
+relationships among three or more variables.
+
+```{=html}
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+::: {.blue}
+```{r}
+pairsLOESS <- function(x, y, ...){
+    tmp <- loess(y~x)
+    newdat <- seq(min(x, na.rm=T), max(x, na.rm=T), length=100)
+    points(x, y, ...)
+      lines(newdat, predict(tmp, newdata=newdat), col="blue", lwd=3)
+}
+pairs(~LDL+age+hivRNA+CD4, panel=pairsLOESS, data=Case1BL, pch=16, main="Case #1")
+```
+
+```{r}
+pairs(~log10VL+Age+Weight+CD4, panel=pairsLOESS, data=Case2BL, pch=16, main="Case #2")
+```
+:::
+
+# Exercises: Graphical Summaries
+
+### Question 1
+
+Explore the variables in the two Case Study datasets. Look for outliers,
+odd values, coding conventions, etc. Determine which plots would be
+appropriate visualizations for the variables. Based on those plots,
+determine which measures of central location and spread are most
+appropriate (if any).
+
+```{r}
+# An example using one variable 
+DFexplore <- na.omit(Case1BL$CD4)
+    hist(DFexplore, xlab=names(DFexplore), main="", cex.lab=1.2, cex.axis=1.2)
+    plot(density(DFexplore), lwd=3, cex.lab=1.2, cex.axis=1.2,
+        xlab=names(DFexplore), main="")
+    boxplot(DFexplore, lwd=2, cex.lab=1.2, cex.axis=1.2, pch=21, cex=1.25,
+        col="grey", bg="grey", xlab=names(DFexplore))
+```
+
+(In base R, I can loop through variables and create 3x3 plots but I do
+not know how to do this in markdown)
+
+```{r}
+#----- Case #1
+DFexplore <- Case1BL %>% select(age, hivRNA, CD4, CD8, SBP, crcl_bsl,
+    eGFR_mdrd, trigs, LDL, FPG, BMI)
+for(ii in 1:ncol(DFexplore)){ #------------------  Plots
+    xax <- na.omit(DFexplore[,ii])
+    if(ii%%3==1){
+        dev.new()
+        par(mfrow=c(3,3))
+    }
+    hist(xax, xlab=names(DFexplore)[ii], main="", cex.lab=1.2, cex.axis=1.2)
+    plot(density(xax), lwd=3, cex.lab=1.2, cex.axis=1.2,
+        xlab=names(DFexplore)[ii], main="")
+    boxplot(xax, lwd=2, cex.lab=1.2, cex.axis=1.2, pch=21, cex=1.25,
+        col="grey", bg="grey", xlab=names(DFexplore)[ii])
+}
+
+#----- Case #2
+DFexplore <- Case2BL %>% select(Age, Weight, VL, log10VL, CD4)
+for(ii in 1:ncol(DFexplore)){ #------------------  Plots  ------------------#
+    xax <- na.omit(DFexplore[,ii])
+    if(ii%%3==1){
+        dev.new()
+        par(mfrow=c(3,3))
+    }
+    hist(xax, xlab=names(DFexplore)[ii], main="", cex.lab=1.2, cex.axis=1.2)
+    plot(density(xax), lwd=3, cex.lab=1.2, cex.axis=1.2,
+        xlab=names(DFexplore)[ii], main="")
+    boxplot(xax, lwd=2, cex.lab=1.2, cex.axis=1.2, pch=21, cex=1.25,
+        col="grey", bg="grey", xlab=names(DFexplore)[ii])
+}
+```
+
+![](Images/day1_img2.png)
+
+![](Images/day1_img3.png)
+
+![](Images/day1_img4.png)
+
+![](Images/day1_img5.png)

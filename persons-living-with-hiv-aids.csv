@@ -1,0 +1,226 @@
+Year,Category,Group,Count
+2011,Age at Year End,0-11,164
+2011,Age at Year End,12-14,86
+2011,Age at Year End,15-17,176
+2011,Age at Year End,18-19,304
+2011,Age at Year End,20-24,2877
+2011,Age at Year End,25-29,6351
+2011,Age at Year End,30-34,9052
+2011,Age at Year End,35-39,11124
+2011,Age at Year End,40-44,17944
+2011,Age at Year End,45-49,23574
+2011,Age at Year End,50-54,19838
+2011,Age at Year End,55-59,13165
+2011,Age at Year End,60-64,7610
+2011,Age at Year End,65-74,4904
+2011,Age at Year End,>= 75,838
+2012,Age at Year End,0-11,147
+2012,Age at Year End,12-14,79
+2012,Age at Year End,15-17,158
+2012,Age at Year End,18-19,297
+2012,Age at Year End,20-24,2922
+2012,Age at Year End,25-29,6644
+2012,Age at Year End,30-34,9245
+2012,Age at Year End,35-39,10923
+2012,Age at Year End,40-44,16896
+2012,Age at Year End,45-49,22984
+2012,Age at Year End,50-54,21249
+2012,Age at Year End,55-59,14382
+2012,Age at Year End,60-64,8444
+2012,Age at Year End,65-74,5716
+2012,Age at Year End,>= 75,982
+2013,Age at Year End,0-11,149
+2013,Age at Year End,12-14,74
+2013,Age at Year End,15-17,139
+2013,Age at Year End,18-19,274
+2013,Age at Year End,20-24,2893
+2013,Age at Year End,25-29,6804
+2013,Age at Year End,30-34,9430
+2013,Age at Year End,35-39,10888
+2013,Age at Year End,40-44,15767
+2013,Age at Year End,45-49,22176
+2013,Age at Year End,50-54,22481
+2013,Age at Year End,55-59,15512
+2013,Age at Year End,60-64,9339
+2013,Age at Year End,65-74,6640
+2013,Age at Year End,>= 75,1143
+2014,Age at Year End,0-11,143
+2014,Age at Year End,12-14,73
+2014,Age at Year End,15-17,127
+2014,Age at Year End,18-19,245
+2014,Age at Year End,20-24,2944
+2014,Age at Year End,25-29,7076
+2014,Age at Year End,30-34,9674
+2014,Age at Year End,35-39,11055
+2014,Age at Year End,40-44,14642
+2014,Age at Year End,45-49,20811
+2014,Age at Year End,50-54,23352
+2014,Age at Year End,55-59,16505
+2014,Age at Year End,60-64,10220
+2014,Age at Year End,65-74,7564
+2014,Age at Year End,>= 75,1341
+2015,Age at Year End,0-11,130
+2015,Age at Year End,12-14,67
+2015,Age at Year End,15-17,119
+2015,Age at Year End,18-19,250
+2015,Age at Year End,20-24,2939
+2015,Age at Year End,25-29,7200
+2015,Age at Year End,30-34,9862
+2015,Age at Year End,35-39,11284
+2015,Age at Year End,40-44,13530
+2015,Age at Year End,45-49,19894
+2015,Age at Year End,50-54,23872
+2015,Age at Year End,55-59,17795
+2015,Age at Year End,60-64,11151
+2015,Age at Year End,65-74,8730
+2015,Age at Year End,>= 75,1592
+2011,Current Gender,Male,102568
+2011,Current Gender,Female,14006
+2011,Current Gender,Transgender: Male-to-Female,1393
+2011,Current Gender,Transgender: Female-to-Male,35
+2011,Current Gender,Alternative Gender Identity,5
+2012,Current Gender,Male,105322
+2012,Current Gender,Female,14267
+2012,Current Gender,Transgender: Male-to-Female,1437
+2012,Current Gender,Transgender: Female-to-Male,37
+2012,Current Gender,Alternative Gender Identity,5
+2013,Current Gender,Male,107648
+2013,Current Gender,Female,14538
+2013,Current Gender,Transgender: Male-to-Female,1481
+2013,Current Gender,Transgender: Female-to-Male,37
+2013,Current Gender,Alternative Gender Identity,5
+2014,Current Gender,Male,109407
+2014,Current Gender,Female,14825
+2014,Current Gender,Transgender: Male-to-Female,1497
+2014,Current Gender,Transgender: Female-to-Male,38
+2014,Current Gender,Alternative Gender Identity,5
+2015,Current Gender,Male,111761
+2015,Current Gender,Female,15069
+2015,Current Gender,Transgender: Male-to-Female,1539
+2015,Current Gender,Transgender: Female-to-Male,42
+2015,Current Gender,Alternative Gender Identity,4
+2011,Race/Ethnicity,American Indian/Alaska Native,395
+2011,Race/Ethnicity,Asian*,3851
+2011,Race/Ethnicity,Black/African American,21009
+2011,Race/Ethnicity,Hispanic/Latino*,38196
+2011,Race/Ethnicity,Native Hawaiian/Pacific Islander,239
+2011,Race/Ethnicity,White,51586
+2011,Race/Ethnicity,Multiple races,2724
+2011,Race/Ethnicity,Unknown race,7
+2012,Race/Ethnicity,American Indian/Alaska Native,398
+2012,Race/Ethnicity,Asian*,4138
+2012,Race/Ethnicity,Black/African American,21497
+2012,Race/Ethnicity,Hispanic/Latino*,39841
+2012,Race/Ethnicity,Native Hawaiian/Pacific Islander,253
+2012,Race/Ethnicity,White,52173
+2012,Race/Ethnicity,Multiple races,2761
+2012,Race/Ethnicity,Unknown race,7
+2013,Race/Ethnicity,American Indian/Alaska Native,399
+2013,Race/Ethnicity,Asian*,4402
+2013,Race/Ethnicity,Black/African American,21942
+2013,Race/Ethnicity,Hispanic/Latino*,41299
+2013,Race/Ethnicity,Native Hawaiian/Pacific Islander,261
+2013,Race/Ethnicity,White,52591
+2013,Race/Ethnicity,Multiple races,2808
+2013,Race/Ethnicity,Unknown race,7
+2014,Race/Ethnicity,American Indian/Alaska Native,394
+2014,Race/Ethnicity,Asian**,4705
+2014,Race/Ethnicity,Black/African American,22253
+2014,Race/Ethnicity,Hispanic/Latino*,42932
+2014,Race/Ethnicity,Native Hawaiian/Pacific Islander,264
+2014,Race/Ethnicity,White,52382
+2014,Race/Ethnicity,Multiple races,2835
+2014,Race/Ethnicity,Unknown race,7
+2015,Race/Ethnicity,American Indian/Alaska Native,400
+2015,Race/Ethnicity,Asian*,4961
+2015,Race/Ethnicity,Black/African American,22595
+2015,Race/Ethnicity,Hispanic/Latino*,44480
+2015,Race/Ethnicity,Native Hawaiian/Pacific Islander,274
+2015,Race/Ethnicity,White,52842
+2015,Race/Ethnicity,Multiple races,2856
+2015,Race/Ethnicity,Unknown race,7
+2011,Transmission Category: Male Adult or Adolescent,Male-to-male sexual contact (MSM),77940
+2011,Transmission Category: Male Adult or Adolescent,Injection drug use (IDU),5455
+2011,Transmission Category: Male Adult or Adolescent,MSM and IDU,9712
+2011,Transmission Category: Male Adult or Adolescent,High-risk heterosexual contact (HRH)**,3372
+2011,Transmission Category: Male Adult or Adolescent,Heterosexual contact (Non-HRH)***,3331
+2011,Transmission Category: Male Adult or Adolescent,Perinatal,255
+2011,Transmission Category: Male Adult or Adolescent,Unknown risk,3533
+2011,Transmission Category: Male Adult or Adolescent,Other****,291
+2011,Transmission Category: Female Adult or Adolescent,Injection drug use (IDU),2995
+2011,Transmission Category: Female Adult or Adolescent,High-risk heterosexual contact (HRH)**,7436
+2011,Transmission Category: Female Adult or Adolescent,Heterosexual contact (Non-HRH)***,2360
+2011,Transmission Category: Female Adult or Adolescent,Perinatal,292
+2011,Transmission Category: Female Adult or Adolescent,Unknown risk,716
+2011,Transmission Category: Female Adult or Adolescent,Other****,155
+2011,Transmission Category: Child (<12 Years Old at the End of Year),Perinatal,148
+2011,Transmission Category: Child (<12 Years Old at the End of Year),Unknown risk,15
+2011,Transmission Category: Child (<12 Years Old at the End of Year),Other****,1
+2012,Transmission Category: Male Adult or Adolescent,Male-to-male sexual contact (MSM),80317
+2012,Transmission Category: Male Adult or Adolescent,Injection drug use (IDU),5405
+2012,Transmission Category: Male Adult or Adolescent,MSM and IDU,9600
+2012,Transmission Category: Male Adult or Adolescent,High-risk heterosexual contact (HRH)**,3416
+2012,Transmission Category: Male Adult or Adolescent,Heterosexual contact (Non-HRH)***,3548
+2012,Transmission Category: Male Adult or Adolescent,Perinatal,263
+2012,Transmission Category: Male Adult or Adolescent,Unknown risk,3865
+2012,Transmission Category: Male Adult or Adolescent,Other****,281
+2012,Transmission Category: Female Adult or Adolescent,Injection drug use (IDU),2948
+2012,Transmission Category: Female Adult or Adolescent,High-risk heterosexual contact (HRH)**,7563
+2012,Transmission Category: Female Adult or Adolescent,Heterosexual contact (Non-HRH)***,2497
+2012,Transmission Category: Female Adult or Adolescent,Perinatal,303
+2012,Transmission Category: Female Adult or Adolescent,Unknown risk,763
+2012,Transmission Category: Female Adult or Adolescent,Other****,152
+2012,Transmission Category: Child (<12 Years Old at the End of Year),Perinatal,131
+2012,Transmission Category: Child (<12 Years Old at the End of Year),Unknown risk,15
+2012,Transmission Category: Child (<12 Years Old at the End of Year),Other****,1
+2013,Transmission Category: Male Adult or Adolescent,Male-to-male sexual contact (MSM),82249
+2013,Transmission Category: Male Adult or Adolescent,Injection drug use (IDU),5358
+2013,Transmission Category: Male Adult or Adolescent,MSM and IDU,9497
+2013,Transmission Category: Male Adult or Adolescent,High-risk heterosexual contact (HRH)**,3490
+2013,Transmission Category: Male Adult or Adolescent,Heterosexual contact (Non-HRH)***,3787
+2013,Transmission Category: Male Adult or Adolescent,Perinatal,271
+2013,Transmission Category: Male Adult or Adolescent,Unknown risk,4141
+2013,Transmission Category: Male Adult or Adolescent,Other****,273
+2013,Transmission Category: Female Adult or Adolescent,Injection drug use (IDU),2890
+2013,Transmission Category: Female Adult or Adolescent,High-risk heterosexual contact (HRH)**,7670
+2013,Transmission Category: Female Adult or Adolescent,Heterosexual contact (Non-HRH)***,2650
+2013,Transmission Category: Female Adult or Adolescent,Perinatal,315
+2013,Transmission Category: Female Adult or Adolescent,Unknown risk,817
+2013,Transmission Category: Female Adult or Adolescent,Other***,152
+2013,Transmission Category: Child (<12 Years Old at the End of Year),Perinatal,126
+2013,Transmission Category: Child (<12 Years Old at the End of Year),Unknown risk,22
+2013,Transmission Category: Child (<12 Years Old at the End of Year),Other****,1
+2014,Transmission Category: Male Adult or Adolescent,Male-to-male sexual contact (MSM),83616
+2014,Transmission Category: Male Adult or Adolescent,Injection drug use (IDU),5308
+2014,Transmission Category: Male Adult or Adolescent,MSM and IDU,9267
+2014,Transmission Category: Male Adult or Adolescent,High-risk heterosexual contact (HRH)**,3573
+2014,Transmission Category: Male Adult or Adolescent,Heterosexual contact (Non-HRH)***,4034
+2014,Transmission Category: Male Adult or Adolescent,Perinatal,281
+2014,Transmission Category: Male Adult or Adolescent,Unknown risk,4496
+2014,Transmission Category: Male Adult or Adolescent,Other****,268
+2014,Transmission Category: Female Adult or Adolescent,Injection drug use (IDU),2837
+2014,Transmission Category: Female Adult or Adolescent,High-risk heterosexual contact (HRH)**,7778
+2014,Transmission Category: Female Adult or Adolescent,Heterosexual contact (Non-HRH)***,2847
+2014,Transmission Category: Female Adult or Adolescent,Perinatal,320
+2014,Transmission Category: Female Adult or Adolescent,Unknown risk,857
+2014,Transmission Category: Female Adult or Adolescent,Other****,147
+2014,Transmission Category: Child (<12 Years Old at the End of Year),Perinatal,120
+2014,Transmission Category: Child (<12 Years Old at the End of Year),Unknown risk,22
+2014,Transmission Category: Child (<12 Years Old at the End of Year),Other****,1
+2015,Transmission Category: Male Adult or Adolescent,Male-to-male sexual contact (MSM),85554
+2015,Transmission Category: Male Adult or Adolescent,Injection drug use (IDU),5264
+2015,Transmission Category: Male Adult or Adolescent,MSM and IDU,9128
+2015,Transmission Category: Male Adult or Adolescent,High-risk heterosexual contact (HRH)**,3597
+2015,Transmission Category: Male Adult or Adolescent,Heterosexual contact (Non-HRH)***,4291
+2015,Transmission Category: Male Adult or Adolescent,Perinatal,288
+2015,Transmission Category: Male Adult or Adolescent,Unknown risk,4870
+2015,Transmission Category: Male Adult or Adolescent,Other****,254
+2015,Transmission Category: Female Adult or Adolescent,Injection drug use (IDU),2785
+2015,Transmission Category: Female Adult or Adolescent,High-risk heterosexual contact (HRH)**,7862
+2015,Transmission Category: Female Adult or Adolescent,Heterosexual contact (Non-HRH)***,3020
+2015,Transmission Category: Female Adult or Adolescent,Perinatal,333
+2015,Transmission Category: Female Adult or Adolescent,Unknown risk,897
+2015,Transmission Category: Female Adult or Adolescent,Other****,142
+2015,Transmission Category: Child (<12 Years Old at the End of Year),Perinatal,111
+2015,Transmission Category: Child (<12 Years Old at the End of Year),Unknown risk,18
+2015,Transmission Category: Child (<12 Years Old at the End of Year),Other****,1

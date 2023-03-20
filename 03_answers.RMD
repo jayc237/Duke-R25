@@ -1,0 +1,257 @@
+---
+title: "Quantitative Methods for HIV Researchers"
+subtitle: "Ggplot Exercises and Solutions"
+author: "Janice M. McCarthy amd Richard Barfield"
+date: "October 27, 2022"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+```{r}
+library(tidyverse)
+```
+
+# 01_base_graphics.RMD exercises
+
+
+
+## 1. 
+
+Plot a scatter plot of petal width vs petal length from the iris data set. (Recall that in base R, you can access the column for petal width using iris\$Petal.Width.)
+
+```{r plotplot, options}
+
+plot(iris$Petal.Length,iris$Petal.Width)
+
+
+
+```
+
+## 2.  
+
+Add a best fit line to the plot.
+
+```{r problem2, options}
+
+m <-  lm(iris$Petal.Width~iris$Petal.Length)
+plot(iris$Petal.Length,iris$Petal.Width)
+abline(m)
+
+
+```
+
+## 3.  
+
+Create a box plot of petal width by species and another box plot of petal length by species. Make these plots sit side-by-side.
+
+```{r prob3, fig.height=6,fig.width=8}
+
+par(mfrow=c(1,2))
+
+boxplot(iris$Petal.Width~iris$Species)
+boxplot(iris$Petal.Length~iris$Species)
+
+
+par(mfrow=c(2,1))
+
+boxplot(iris$Petal.Width~iris$Species)
+boxplot(iris$Petal.Length~iris$Species)
+
+dev.off()
+par(mfrow=c(1,1))
+```
+
+## 4.  
+
+Create a scatter plot of petal width vs length and color/change symbol by species.
+
+```{r problem4, options}
+
+newspecies=as.character(iris$Species)
+newspecies[iris$Species=="setosa"]<-1
+newspecies[iris$Species=="versicolor"]<-2
+newspecies[iris$Species=="virginica"]<-3
+
+newspecies.col=as.character(iris$Species)
+newspecies.col[iris$Species=="setosa"]<-"blue"
+newspecies.col[iris$Species=="versicolor"]<-"darkorange"
+newspecies.col[iris$Species=="virginica"]<-"pink"
+
+
+plot(iris$Petal.Width,iris$Petal.Length,
+     col=newspecies.col,pch=as.numeric(newspecies))
+
+
+```
+
+## 5.  
+
+Add best fit lines for each species to this plot. Don't forget to color code the lines. You may also play with changing the line types.
+
+```{r problem5, options}
+
+m <-  lm(iris$Petal.Width~iris$Petal.Length)
+
+m0 <-  lm(Petal.Width~Petal.Length,data=iris,
+          subset = Species=="virginica")
+m1 <-  lm(Petal.Width~Petal.Length,data=iris,
+          subset = Species=="setosa")
+m2 <-  lm(Petal.Width~Petal.Length,data=iris,
+          subset = Species=="versicolor")
+
+newspecies.col=as.character(iris$Species)
+newspecies.col[iris$Species=="setosa"]<-"blue"
+newspecies.col[iris$Species=="versicolor"]<-"darkorange"
+newspecies.col[iris$Species=="virginica"]<-"pink"
+
+
+plot(iris$Petal.Length,iris$Petal.Width,col=newspecies.col)
+abline(m0,col="pink")
+abline(m1,col="blue")
+abline(m2,col="darkorange")
+```
+
+## 6.  
+Save this scatter plot to a file called "figs/iris.png".
+
+```{r problem6, options}
+png("figs/iris.png")
+
+plot(iris$Petal.Length,iris$Petal.Width,col=newspecies.col)
+abline(m0,col="pink")
+abline(m1,col="blue")
+abline(m2,col="darkorange")
+dev.off()
+
+```
+
+## 7.  
+
+Read the plot file back in and display in the markdown.
+
+<img src="figs/iris.png" alt="Linear Model-3 species" width="400"/>
+
+
+
+# 02_graphics_ggplot2.RMD exercises
+
+## 1.  
+
+Plot a scatter plot of petal width vs petal length from the iris data set. (Recall that in base R, you can access the column for petal width using iris\$Petal.Width.)
+
+```{r}
+iris %>% 
+  ggplot(aes(x=Petal.Width, y = Petal.Length)) +
+  geom_point()
+```
+
+## 2.  
+
+Add a best fit line to the plot.
+
+```{r}
+iris %>% 
+  ggplot(aes(x=Petal.Width, y = Petal.Length)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+```
+
+## 3.  
+
+Create a box plot of petal width by species and another box plot of petal length by species. Make these plots sit side-by-side.
+
+```{r}
+
+iris %>% 
+  pivot_longer(cols=c(Petal.Length,Petal.Width),
+                      names_to="Vars", values_to = "Inches") %>%
+  ggplot(aes(x=Species, y=Inches)) + 
+  geom_boxplot() + 
+  facet_wrap(.~Vars) +
+  geom_jitter()
+  
+
+iris %>% 
+  pivot_longer(cols=c(Petal.Length,Petal.Width),
+                      names_to="Vars", values_to = "Inches") %>%
+  ggplot(aes(x=Species, y=Inches)) + 
+  geom_boxplot() + 
+  facet_wrap(.~Vars,scales="free_y") +
+  geom_jitter()
+```
+
+## 4.  
+
+Create a scatter plot of petal width vs length and color/change symbol by species.
+
+```{r}
+iris %>% 
+  ggplot(aes(Petal.Width, Petal.Length, color = Species)) +
+  geom_point()
+```
+
+## 5. 
+
+Add best fit lines for each species to this plot.
+
+```{r}
+ toSave <- iris %>% ggplot(aes(Petal.Width, Petal.Length, color = Species)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+toSave
+```
+
+## 6.  
+
+Save this scatter plot to a file called "figs/iris_ggplot.png".
+
+```{r}
+ggsave("figs/iris_ggplot.png", toSave )
+```
+
+## 7. 
+
+Read the plot file back in and display in the markdown.
+
+<img src="figs/iris_ggplot.png" alt="drawing" width="498"/>
+
+
+## 8.  
+
+Create a histogram of Petal Length, and fill the bars by Species
+
+```{r}
+iris %>% ggplot(aes(x=Petal.Length, fill = Species)) + geom_histogram()
+```
+
+## 9. 
+
+Create box plots of Sepal Width by Species
+
+```{r}
+iris %>% ggplot(aes(x = Sepal.Width, y = Species, color = Species)) + geom_boxplot() +
+  geom_jitter()
+```
+
+```{r}
+iris %>% ggplot(aes(x=Species,y=Petal.Width)) + 
+  geom_boxplot() +
+  facet_wrap(~Species) 
+
+iris %>% ggplot(aes(x=Species,y=Petal.Width)) + 
+  geom_boxplot() +
+  facet_wrap(~Species,scales="free_x") 
+```
+
+# Great ggplot resource!
+
+<http://r-statistics.co/Top50-Ggplot2-Visualizations-MasterList-R-Code.html>
+
+<https://ggplot2-book.org/>
+
+

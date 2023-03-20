@@ -1,0 +1,1386 @@
+---
+title: "Quantitative Methods for HIV Researchers"
+subtitle: "Part II Day 3: Hypothesis Testing, and Two-Sample Tests"
+author: "Pixu Shi, PhD, Tina Davenport, PhD"
+date: "Feb 2, 2023"
+output: 
+  rmdformats::material:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+Sys.setenv("LANGUAGE"="En")
+Sys.setlocale("LC_ALL", "English")
+
+#change for container
+
+library(tidyverse)
+library(vioplot)
+library(DT)
+library(pwr)
+library(ggpubr)
+library(reshape2)
+library(cowplot)
+
+#===========================================================================#
+# Create HIV data
+#===========================================================================#
+Case1 <- read.csv(file="Data/data_Case1.csv", na.strings="",
+    stringsAsFactors=TRUE)
+
+# create dataset with change in LDL from week 0 to week 24
+Case1LDL <- Case1 %>% filter(week %in% c(0,24)) %>%
+    select(ntisid, Arm, week, LDL) %>%
+    reshape(v.names=c("LDL"), timevar="week", idvar="ntisid",
+        direction="wide", sep="w") %>%
+    mutate(LDLchg=LDLw24-LDLw0)
+
+
+Case2 <- read.csv(file=paste0("Data/data_Case2.csv"), na.strings="",
+    stringsAsFactors=TRUE)
+Case2$VL[which(Case2$VL<50)] <- 50  # if VL <50, set to 50, the lower limit
+Case2$VL[which(Case2$VL>500000)] <- 500000  # set to upper limit
+Case2 <- Case2 %>%  mutate(log10VL=log10(VL),
+      VLud=ifelse(VL<=50, 1, 0))  # indicator for undetectable VL
+
+# Create vector of virologic control over follow-up indicator
+getVC <- function(x){  # x will be a vector of 0s, 1s, or NAs
+    ifelse( any(x==0, na.rm=TRUE), 0, 1) 
+}
+
+# apply the function above to the follow-up data only
+# (no one in control at baseline)
+Case2fup <- Case2 %>% filter(t !=0) %>% droplevels  #  follow-up data
+VC <- tapply(Case2fup$VLud, Case2fup$SID, getVC)
+
+# Merge it with the baseline data
+Case2VC <- Case2 %>% filter(t==0) %>% select(SID, NonAdhBL) %>%
+    merge(y=VC, by.x="SID", by.y=0, all=TRUE) %>%
+    rename(VCfup=y) %>% droplevels()
+
+rm(Case2fup, getVC, VC)  # clean up to prevent confusion
+```
+
+
+# Basic Concepts
+
+## Hypotheses 
+
+### Definition {.tabset}
+
+**Research hypothesis**: a statement that gives the desired answer to the research question
+
+
+**Statistical hypotheses**: research hypotheses formatted into a statement regarding the parameters of probability distributions
+
+***
+
+#### Case #1
+
+**Research question**: Does an antiretroviral drug change the LDL from baseline to 24 weeks?
+
+**Research hypothesis**: Is the mean LDL change between baseline and 24 weeks different from zero?
+
+**Statistical hypotheses**: $H_0: \mu = 0\ \textrm{vs} \ H_A: \mu \ne 0$, where $\mu$ is the population mean of LDL change among individuals taking the antiretroviral drug.
+
+***
+
+#### Case #2
+
+**Research question**: How do 2 different antiretrovirals compare in terms of change in LDL from baseline to 24 weeks?
+
+**Research hypothesis**: There will be a difference in mean LDL change between the 2 antiretrovirals.
+
+**Statistical hypotheses**: $H_0: \mu_{1} = \mu_{2} \ \textrm{vs} \ H_A: \mu_{1} \ne \mu_{2}$, where $\mu_j$ is the population mean change in LDL for individuals on treatment $j$.
+
+***
+
+#### Case #3
+
+**Research question**: Is there a difference in HIV control between those who adhere to their medications and those who do not?
+
+**Research hypothesis**: The proportion of individuals with undetectable viral load over follow-up will be higher among adherers than among non-adherers.
+
+**Statistical hypotheses**: $H_0: \pi_{\textrm{adh}} \le \pi_{\textrm{non}} \ \textrm{vs} \ H_A: \pi_{\textrm{adh}} \gt \pi_{\textrm{non}}$, where $\pi_{\textrm{adh}}$ and $\pi_{\textrm{non}}$ are the population proportions of individuals with virologic control among adherers and non-adherers, respectively.
+
+
+***
+
+## Null and Alternative Hypotheses
+
+
++ $H_0$ denotes null hypothesis, $H_A$ (or $H_a$, $H_1$) denotes alternative hypothesis.
++ The $H_0$ and $H_A$ are **mutually exclusive and exhaustive** of all possible results of the research question, i.e. one of the hypotheses - and only one - must be true.
++ $H_0$ posits the status quo
++ $H_0$ is the conservative hypothesis
++ In the US legal system, the defendant is assumed to be innocent. $H_0$: innocence
++ Drug safety study:
+
+    + $H_0$: Drug is toxic
+    + $H_A$: Drug is safe
++ Drug efficacy study:
+
+    + $H_0$: Drug is not efficacious
+    + $H_A$: Drug is efficacious
+
+***
+
+## Type I and Type II Errors
+
+Based on the data, we decide between $H_0$ and $H_A$. Due to the randomness in the data, we may make two types of errors.
+
+![](Images/day3_img1.jpg){width=100%}
+
+
++ $\alpha$: probability of type I error
++ $\beta$: probability of type II error
++ $1-\beta$: power
+
+### Trade-Off Between Type I and Type II Errors
+
++ You often cannot increase $\alpha$ and $\beta$ together
++ In statistics, we control $\alpha$ below a certain level (e.g. 0.05), and use decision rule with small $\beta$ (larger power). This is related to setting $H_0$ as the conservative hypothesis
++ Drug efficacy example: $H_0:$ not efficacious, $H_1:$ efficacious
+  
+    + Type I error: conclude that the drug is efficacious when it's not
+    + Type II error: conclude that the drug is not efficacious when it is
+    
+### Meaning of Rejection and No Rejection 
+
++ Since type I error and type II error are not treated symmetrically, rejection and no rejection of $H_0$ are also not symmetric
++ Rejection of $H_0$ means: I have so much evidence to reject $H_0$ that the probability of a wrong rejection is $<\alpha$
++ No rejection of $H_0$ means: I don't have enough evidence to reject $H_0$ while keeping the probability of wrong rejection $<\alpha$. It doesn't mean we have enough evidence that $H_0$ is true. 
++ Because type II error is not controlled, if I say $H_0$ is true, in most cases I won't be able to tell you the probability of making a wrong acceptance of $H_0$ (type II error).
+
+***
+
+## Test Statistic
+
+* A test statistic $T$ is a way to compile the data into a number, so that it can reflect your hypotheses
+
+* Multiple test statistics may exist for the same testing problem (Z-test, likelihood ratio test (LRT), etc.)
+
+* A test statistic is a random variable, because it is a combination of random variables (data)
+
+* Need to know the (large-sample) distribution of the test statistic under $H_0$.
+
+* **Acceptance region $A$** is the range where the test statistic will fall in with probability $\geq 1-\alpha$ under $H_0$, i.e. $P(T\in A|H_0)\geq 1-\alpha$
+
+* When test statistic is outside the acceptance region, rejecting $H_0$ has a type I error probability that is $<\alpha$, i.e. $P(T\notin A|H_0)<\alpha$
+
+* Acceptance region is often connected to a confidence interval (CI) of the parameters, so CI can also be used to reject $H_0$
+
+***
+
+## P-Value
+
++ p-value is the probability of observing data "more extreme" than what you currently have if $H_0$ is true
++ "more extreme" is defined corresponding to the direction of $H_A$:
+
+    + Denote $\bar{y}$ as the sample means of LDL change
+    + $H_0: \mu=0$ vs $H_A: \mu\neq 0$, more extreme means observing a $|\bar{Y}|$ that is larger than what we have from the current data $|\bar{y}|$
+    + $H_0: \mu=0$ vs $H_A: \mu<0$, more extreme means observing a $\bar{Y}$ that is smaller than what we have from the current data $\bar{y}$
+    + $H_0: \mu=0$ vs $H_A: \mu>0$, more extreme means observing a $\bar{Y}$ that is larger than what we have from the current data $\bar{y}$
+    
++ p-value can be used as a test statistic
+
++ p-value is smaller when the observed data is more in the direction of $H_A$ compared to what is expected when $H_0$ is true. So reject $H_0$ and accept $H_A$ when p-value is very small.
+
++ We reject $H_0$ when p-value$<\alpha$
+    
+    + This is a decision rule with probability of type I error $<\alpha$
+    + There is nothing special about $\alpha=0.05$. The choice of $\alpha$ reflects your tolerance on type I error
+    
++ Smaller p-value means that the effect is so significant that you can reject $H_0$ with smaller probability of making type I error
+
+***
+
+
+## Hypothesis Testing Steps
+
+1. Know the data - type of data, study design, distribution assumptions
+
+2. Set up statistical hypotheses and choose significance level $\alpha$
+
+3. Choose a test statistic
+
+4. Calculate the test statistic, p-value, or confidence interval using the observed data
+
+5. Draw inference based on significance level based on test statistic, p-value or confidence interval
+
+***
+
+# One-Sample Hypothesis Testing
+
+
+## One-Sample Test for Population Mean $\mu$ of a $N(\mu,\sigma^2)$
+
+Case #1: Determine if the population mean change in LDL from week 0 to week 24 is significantly different from 0 (across all treatments for now).
+
+### Hypothesis Testing Step 1: Know the Data  {.tabset}
+
+#### Type of Data
+The type of data determines what statistical tests are appropriate.
+
+
+Change in LDL are quantitative, continuous data.
+
+```{r}
+LDLchg <- na.omit(Case1LDL$LDLchg)
+c(summary(LDLchg), SD=sd(LDLchg), N=length(LDLchg)) %>% round(2)        # summary stats
+
+LDLchg <- as.data.frame(LDLchg)
+a <- ggplot(LDLchg,aes(x=LDLchg)) + geom_histogram(bins = 25) + ggtitle("") + xlab("Change in LDL") + ylab("Frequency")
+b <- ggplot(LDLchg,aes(x=LDLchg)) + geom_density() + ggtitle("") + xlab("Change in LDL")
+c <- ggplot(LDLchg,aes(y=LDLchg)) + geom_boxplot() + ggtitle("") + xlab("Change in LDL")
+d <- ggplot(LDLchg,aes(x=1,y=LDLchg)) + geom_violin() + geom_boxplot(width=0.02) + ggtitle("") + xlab("Change in LDL") + ylab("")
+
+ggarrange(a,b,c,d)
+```
+
+***
+
+#### Study Design
+The study design will also influence the test and the inference that can be drawn.
+
+Cross-sectional simple random sample of individuals of interest.
+
+
+***
+
+#### Distribution Assumptions
+General testing procedures might be modified depending on the assumptions being made (e.g., is the variance known or unknown?).
+
+
+Assume $Y_1,\dots,Y_n\sim \textrm{iid} \ N(\mu,\sigma^2)$ (at least approximately).
+
+**GRAPH THE DATA!** Make sure the sample actually conforms to the assumptions being made about the population.
+
+```{r out.width="100%"}
+ggplot(LDLchg,aes(sample=LDLchg)) + stat_qq() +
+  stat_qq_line(col="red") + ggtitle("Q-Q Plot for change in LDL")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlab("Theoretical Quantiles") + ylab("Sample Quantiles")
+```
+
+
+***
+
+### Hypothesis Testing Step 2: Statistical Hypotheses {.tabset}
+
+
+**The null hypothesis in words**: There is no change in population mean LDL from week 0 to 24 weeks after treatment initiation.
+
+**The statistical null hypothesis**: $H_0: \mu=0$, where $\mu$ is the population mean change in LDL from week 0 to week 24.
+
+**The alternative hypothesis in words**: There **is a change** in population mean LDL from week 0 to 24 weeks after treatment initiation.
+
+**The statistical alternative hypothesis**: $H_A: \mu \ne 0$.
+
+Let's choose $\alpha=0.05$.
+
+***
+
+### Hypothesis Testing Step 3: Test Statistic {.tabset}
+
+#### Test Statistic
+
+For testing $H_0:\mu=\mu_0$ **when the population variance is unknown**, use the test statistic
+
+$$T=\frac{\bar{Y}-\mu_0}{S/\sqrt{n}}=\frac{\frac{1}{n}\sum_{i=1}^nY_i-\mu_0}{\frac{1}{\sqrt{n}}\sqrt{\sum_{i=1}^n(Y_i-\bar{Y})^2/(n-1)}}$$
+
+In our example, $\mu_0=0$.
+
+*** 
+
+#### Distribution of the Test Statistic
+
+Assuming the null were true, then the sample of LDL change scores would be $Y_1,Y_2,...,Y_n \sim \textrm{iid} \ N(\mu_0,\sigma^2)$. Thus,
+
+$$T=\frac{\bar{Y}-\mu_0}{S/\sqrt{n}} \sim t_{n-1} \ \textrm{under} \ H_0,$$
+Or specifically,
+$$T=\frac{\bar{Y}-0}{S/\sqrt{262}} \sim t_{261}$$
+
+The distribution of the test statistic under $H_0$ is $t_{261}$.
+
+***
+
+#### Acceptance Region
+
+Suppose we choose $\alpha=0.05$. Under $H_0$, $T$ should be between $\pm t_{n-1,1-\alpha/2}=\pm 1.97$ with probability $1-\alpha=0.95$.
+
+```{r}
+ggplot(data.frame(y = c(-3.5, 3.5)), aes(y)) + 
+  stat_function(fun = dt, args = list(df = 261)) + 
+  stat_function(fun = dt, args = list(df = 261), 
+                xlim = c(-1.97, 1.97), geom = "area", fill = "darkred") +
+  geom_text(x = -2.5, y = 0.09, label = "P(T<-1.97)=0.025") + 
+  geom_text(x = 2.5, y = 0.09, label = "P(T>1.97)=0.025") + 
+  geom_text(x = -1.97, y = -0.009, label = "-1.97") + 
+  geom_text(x = 1.97, y = -0.009, label = "1.97") + 
+  labs(title = "PDF of Student t(df=261)", x="T under H0", y="Density") +
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+***
+
+### Hypothesis Testing Step 4: Calculate Test Statistic and P-Value {.tabset}
+
+#### Test Statistic
+
+The sample size was $n=262$ non-missing values and summary statistics are below. From the sample, $\bar{y}=2.23$ and $s=25.47$.
+```{r}
+LDLchg <- na.omit(Case1LDL$LDLchg)
+c(summary(LDLchg), SD=sd(LDLchg), N=length(LDLchg)) %>% round(2)        # summary stats
+```
+
+
+The value of the test statistic is 
+$$t_{\textrm{obs}}=\frac{\bar{y}-\mu_0}{s/\sqrt{n}}=\frac{2.23-0}{25.47/\sqrt{262}}=1.42$$
+This is within the acceptance region with $\alpha=0.05$.
+```{r}
+TT <- (mean(LDLchg) - 0) / sqrt( var(LDLchg)/length(LDLchg) )
+TT
+```
+
+
+***
+
+#### P-value
+
+
+For the two-sided test, the p-value is the probability of observing a $T$ that is more extreme than $t_{\textrm{obs}}$ in the direction of $H_A$ under $H_0$ :
+
+$$p_{\textrm{val}}=P(T\le -t_{\textrm{obs}} \ \textrm{or} \ T \ge t_{\textrm{obs}}|H_0 \ \textrm{is true})$$
+$$=P(T\le -1.42|H_0 \ \textrm{is true}) + P(T\ge 1.42|H_0 \ \textrm{is true})$$
+$$= 0.079 + 0.079 = 0.158$$
+This is smaller than $\alpha$.
+```{r}
+ggplot(data.frame(y = c(-3.5, 3.5)), aes(y)) + 
+  stat_function(fun = dt, args = list(df = 261)) + 
+  stat_function(fun = dt, args = list(df = 261), 
+                xlim = c(-3.5, -1.42), geom = "area", fill = "darkred") +
+  stat_function(fun = dt, args = list(df = 261), 
+                xlim = c(1.42,3.5), geom = "area", fill = "darkred") +
+  geom_text(x = -2.5, y = 0.12, label = "P(T<-1.42)=0.079") + 
+  geom_text(x = 2.5, y = 0.12, label = "P(T>1.42)=0.079") + 
+  geom_text(x = -1.42, y = -0.009, label = "-1.42") + 
+  geom_text(x = 1.42, y = -0.009, label = "1.42") + 
+  labs(title = "PDF of Student t(df=261)", x="T under H0", y="Density") +
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+***
+
+#### Confidence Interval
+
+Hypotheses can also be tested by constructing $100(1-\alpha)\%$ confidence intervals. Recall from the last lecture that $1-\alpha$ CI for $\mu$ is
+
+$$(\bar{y}-t_{n-1,1-\alpha/2}\frac{s}{\sqrt{n}}, \bar{y}+t_{n-1,1-\alpha/2}\frac{s}{\sqrt{n}})$$
+
++ $P(\mu_0\in CI|H_0)\geq 1-\alpha$, i.e. $P(\mu_0\notin CI|H_0)< \alpha$, so $\mu_0\notin CI$ 
+
++ Rejecting $H_0$ using $\mu_0\notin CI$ as a rule has Type I error probability $<\alpha$,
+
++ $\mu_0\in CI$ corresponds to an acceptance region of the test statistic $T$.
+
+$$\mu_0\in CI\Leftrightarrow \left|\dfrac{\bar{y}-\mu_0}{s/\sqrt{n}}\right|<t_{n-1,1-\alpha/2}$$
+
+Plugging in the observed data, the 95\% CI of $\mu_0$ is (-0.87, 5.33), which contains $\mu_0=0$.
+
+```{r}
+mean(LDLchg) + qt(c(0.025, 0.975), df=length(LDLchg)-1) * sd(LDLchg)/ sqrt(length(LDLchg))
+```
+
+
+
+***
+
+### Hypothesis Testing Step 5: Draw Inference
+
+Using test statistic \& acceptance region, or p-value, or confidence interval, we come to the same conclusion (because they are equivalent): 
+
+**Do not reject $H_0$ and there is not enough evidence at the 0.05 level to say that the population mean change in LDL is different from 0.**
+
+
+***
+
+### One Sample Hypothesis Testing in R
+
+`t.test(x, y=NULL,`
+
+&nbsp;&nbsp;&nbsp; `alternative=c("two.sided", "less", "greater"),`
+    
+&nbsp;&nbsp;&nbsp; `mu=0, paired=FALSE, var.equal=FALSE,`
+    
+&nbsp;&nbsp;&nbsp; `conf.level=0.95)`
+
+
+`x`: vector of data 
+
+`alternative`: choose two-sided for $H_A:\mu\ne \mu_0$, less for $H_A:\mu \lt \mu_0$, and greater for $H_A:\mu \gt \mu_0$
+
+`mu`: desired $\mu_0$.
+
+`conf.level`: $100(1-\alpha)$ for the confidence interval
+
+`y`, `paired`, and `var.equal` to be discussed later; just use the defaults for this test
+
+
+
+
+```{r}
+t.test(x=LDLchg, y=NULL, alternative="two.sided", mu=0, paired=FALSE, var.equal=FALSE,
+    conf.level=0.95)
+```
+
+
+
+***
+
+## One-Sample Test on Non-Normal Population
+
+What if the sample $Y_1,...,Y_n$ is not from a normally distributed population?
+
+If the sample size $n$ is large enough to assume that the CLT and Slutsky's theorem hold, then proceed as above.
+
+*	The resulting test will be approximate; the test will be more accurate as the CLT/Slutsky approximation gets better.
+  
+*	How large is "large enough"? It depends on the distribution of the data. You must decide on a case-by-case basis whether or not $n$ is large enough.
+  
+*	For binary data and population proportions, a "rule of thumb" is $n\pi_0 (1-\pi_0)>5$. (Note: this rule comes from knowing that if $\pi$ is close to 0.5, the binomial distribution is close to symmetric. As $\pi$ moves away from 0.5 in either direction, the distribution becomes more skewed and a larger sample is needed for the CLT to hold.)
+  
+If the above does not hold, then use a nonparametric test (covered later).
+
+***
+
+### Example: Hypothesis Testing of a Population Proportion
+
+Case #2: Is there evidence at the 0.05 level to suggest that the population proportion of individuals with HIV control over follow-up is different from 50% (random chance)?
+
+Among $n=318$ individuals with non-missing virologic control status over follow-up, 119 (37.4%) of them had virologic control.
+
+<br>
+
+**Step 1:** Virologic control is a binary variable, 1=virologic control and 0=virologic failure. Thus, each $Y_i\sim \textrm{Bern}(\pi)$ for $i=1,...,n$ where $n=318$.
+```{r}
+VCfup <- na.omit(Case2VC$VCfup)
+addmargins(table(VCfup, exclude=NULL));  prop.table(table(VCfup, exclude=NULL))
+```
+
+Note that $E(Y_i )=\pi$, and $\textrm{var}(Y_i )=\pi(1-\pi)$.
+  
+The "rule of thumb" is satisfied since $n\pi_0 (1-\pi_0 )=(318)(0.5)(1-0.5)>5$. We can use Slutsky's and the CLT to use normal theory to perform an approximate hypothesis test.
+```{r}
+length(VCfup)*(0.5)*(1-0.5)  # Step 1: rule of thumb
+```
+
+<br>
+
+**Step 2**: $H_0: \pi=\pi_0\ vs\ H_A: \pi \ne \pi_0$, where $\pi_0=0.5$ and $\pi$ is the population proportion of individuals who have virologic control over follow-up.
+
+<br>
+
+**Step 3**: The best estimate of $\pi$ is the sample proportion (mean) 
+$$\hat{p}=\frac{1}{n}\sum_{i=1}^nY_i=\bar{Y}$$
+By the CLT and Slutsky's, the distribution of $\hat{p}$ is approximately normal with mean $\pi$ and variance $\pi(1-\pi)/n$.
+Under the null, the test statistic is
+$$Z=\frac{\hat{p}-\pi_0}{\sqrt{\frac{\pi_0(1-\pi_0)}{n}}}\sim N(0,1) \textrm{ under } H_0$$
+Note: $\pi_0$ is used in the denominator because we are operating under the assumption that the null is true. An alternative test statistic would replace the $\pi_0$ in the denominator by $\hat{p}$.
+
+<br>
+
+
+**Step 4**: Note that $\hat{p}=(1/318)\sum Y_i= 119 / 318=0.3742$. Thus,
+$$Z=\frac{\hat{p}-\pi_0}{\sqrt{\frac{\pi_0(1-\pi_0)}{n}}}=\frac{0.3742-0.5}{\sqrt{\frac{(0.5)(1-0.5)}{318}}}=-4.49$$
+```{r}
+#----- Step 4:
+phat <- sum(VCfup) / length(VCfup)
+pi0 <- 0.5
+nn <- length(VCfup)
+Z <- (phat-pi0)/sqrt(pi0*(1-pi0)/nn)  # (0.3742-0.5)/sqrt(0.5*(1-0.5)/318)
+Z
+coverage <- 0.95
+CI <- phat+c(1,-1)*qnorm((1-coverage)/2)*sqrt(phat*(1-phat)/nn)
+CI
+pval <- pnorm(Z)*2
+pval
+```
+
+The acceptance region for $Z$ is $\pm Z_{1-\alpha}=\pm 1.96$. The p-value is $P(Z\le -4.49│H_0 )+ P(Z\ge 4.49│H_0 )\lt 0.001$. The confidence interval is easier to build using the alternative statistic: $\hat{p}\pm Z_{1-\alpha}\sqrt{\hat{p}(1-\hat{p})/n}$.
+
+Note: R provides a convenient function for one sample binomial test that is based on the exact distribution of $\hat{p}$ instead of normal approximation.
+
+```{r}
+binom.test(x=sum(VCfup), n=length(VCfup), p=0.5, 
+           conf.level=0.95, alternative="two.sided")
+```
+
+
+<br>
+
+**Step 5**: Since the p-value is smaller than the significance level of the test, reject $H_0$. There is evidence to suggest that the population proportion of individuals with virologic control over follow-up is different from 50%.
+
+***
+
+# Two-Sample Hypothesis Testing
+
+## Two-Sample Test with Unknown, Equal Variance
+
+Let Population 1 have a $N(\mu_1,\sigma^2)$ distribution and let $Y_{11},Y_{12},...,Y_{1n_1}$ be a random sample.
+
+Let Population 2 have a $N(\mu_2,\sigma^2)$ distribution and let $Y_{21},Y_{22},...,Y_{2n_2}$ be a random sample.
+
+Note that the means from Pop1 and Pop2 are different, but the **variances are assumed to be equal**. The means and the variance are unknown.
+
+Of interest is the difference between the means of the populations, $\delta=\mu_1-\mu_2$.
+
+### Point Estimate of $\delta=\mu_1-\mu_2$
+
+When assuming normality, the "best" estimate of $\mu$ is $\bar{Y}$ (unbiased, minimum variance). Thus, it's logical that the best estimate of $\delta$ would be $D=\bar{Y_1}-\bar{Y_2}$.
+
+
+### Distribution of D
+
+* Note that $\bar{Y_1}\sim N(\mu_1,\sigma^2/n_1)$, $\bar{Y_2}\sim N(\mu_2,\sigma^2/n_2)$, and $\bar{Y_1}$ and $\bar{Y_2}$ are independent.
+
+* The difference between two independent normally distributed random variables is also a normally distributed random variable.
+
+* $E(D)=\mu_1-\mu_2$
+
+* $\textrm{var}(D)=\sigma^2/n_1+\sigma^2/n_2$
+
+Thus
+$$D \sim N \left( \mu_1-\mu_2,\frac{\sigma^2}{n_1}+\frac{\sigma^2}{n_2} \right)$$
+
+
+### Confidence Interval for D
+
+If the population variance is assumed to be the same for the two groups, then the sample variances computed from the two samples both estimate the same quantity.
+
+The best way to estimate the common variance $\sigma^2$ is to create a weighted average of the two sample estimates ("pool" them together).
+
+$$S_p^2=\frac{(n_1-1)S_1^2+(n_2-1)S_2^2}{(n_1-1)+(n_2-1)}$$
+Weighting by $(n_i-1)$ rather than $n_i$ results in an unbiased estimator of $\sigma^2$.
+
+A two-sided $100(1-\alpha)\%$ CI for D has the form
+
+$$(\bar{y_1}-\bar{y_2})\pm t_{1-\alpha/2}\sqrt{\frac{s_p^2}{n_1}+\frac{s_p^2}{n_2}}$$
+The number of degrees of freedom is $n_1+n_2-2$.
+
+
+
+### Example: Two-Sample T-Test with Equal Variance {.tabset}
+
+Case #3
+
+* Assume that change in LDL among those in treatment $A \sim N(\mu_1,\sigma^2)$.
+
+* Assume that change in LDL among those in treatment $B \sim N(\mu_2,\sigma^2)$.
+
+Want to draw inference on the difference $\mu_1-\mu_2$.
+
+#### Data Summaries
+```{r}
+datAB <- Case1LDL %>% select(ntisid, Arm, LDLchg) %>%
+    filter(Arm %in% c("A", "B")) %>%
+    na.omit() %>% droplevels()
+# summary(dat);  dim(dat)
+
+descr <- function(x){  # write a function to get descriptive statistics
+    round(c(Mean=mean(x, na.rm=TRUE), SD=sd(x, na.rm=TRUE),
+        Var=var(x, na.rm=TRUE), n=length(x)), 3)
+}
+```
+
+We have the following summary statistics for non-missing values:
+
+A (ATV/r):
+```{r}
+tapply(datAB$LDLchg, datAB$Arm, descr)$A
+
+plot(density(datAB$LDLchg[datAB$Arm=="A"]), lwd=3, cex.lab=1.3,
+    cex.axis=1.3, xlab="LDL Change among Trt A", main="", ylim=c(0, 0.02))
+  curve(dnorm(x, mean=mean(datAB$LDLchg[datAB$Arm=="A"]),
+      sd=sd(datAB$LDLchg[datAB$Arm=="A"])), add=TRUE, col=2, lwd=1)
+qqnorm(datAB$LDLchg[datAB$Arm=="A"], lwd=2, cex.lab=1.3, cex.axis=1.3, main="")
+  qqline(datAB$LDLchg[datAB$Arm=="A"], col=2, lwd=2)
+```
+
+B (RAL):
+```{r}
+tapply(datAB$LDLchg, datAB$Arm, descr)$B
+
+plot(density(datAB$LDLchg[datAB$Arm=="B"]), lwd=3, cex.lab=1.3,
+    cex.axis=1.3, xlab="LDL Change among Trt B", main="", ylim=c(0, 0.02))
+  curve(dnorm(x, mean=mean(datAB$LDLchg[datAB$Arm=="B"]),
+      sd=sd(datAB$LDLchg[datAB$Arm=="B"])), add=TRUE, col=2, lwd=1)
+qqnorm(datAB$LDLchg[datAB$Arm=="B"], lwd=2, cex.lab=1.3, cex.axis=1.3, main="")
+  qqline(datAB$LDLchg[datAB$Arm=="B"], col=2, lwd=2)
+```
+
+***
+
+#### Confidence Intervals
+
+Compute the pooled variance $s_p^2$:
+
+$$s_p^2=\frac{(78-1)(584.117)+(88-1)(607.470)}{(78-1)+(88-1)}=596.5$$
+```{r}
+n1 <- sum(datAB$Arm=="A")
+yb1 <- mean(datAB$LDLchg[datAB$Arm=="A"])
+v1 <- var(datAB$LDLchg[datAB$Arm=="A"])
+n2 <- sum(datAB$Arm=="B")
+yb2 <- mean(datAB$LDLchg[datAB$Arm=="B"])
+v2 <- var(datAB$LDLchg[datAB$Arm=="B"])
+
+sp <- sqrt(((n1-1)*v1+(n2-1)*v2)/(n1+n2-2))
+sp^2
+```
+
+**90% CI**: $(1.126-(-0.352))\pm 1.653 \sqrt{\frac{596.5}{78}+\frac{596.5}{88}}=(-4.80,7.76)$
+```{r}
+ME <- qt(0.95, df=n1+n2-2)*sqrt(sp^2/n1 + sp^2/n2)    # Margin of Error
+(yb1-yb2) +c(-ME,ME)                                  # 90% CI
+```
+
+**95% CI**: $(1.126-(-0.352))\pm 1.975\sqrt{\frac{596.5}{78}+\frac{596.5}{88}}=(-6.02,8.98)$
+```{r}
+ME <- qt(0.975, df=n1+n2-2)*sqrt(sp^2/n1 + sp^2/n2)   # Margin of Error
+(yb1-yb2) +c(-ME,ME)                                  # 95% CI
+```
+
+**99% CI**: $(1.126-(-0.352))\pm 2.606\sqrt{\frac{596.5}{78}+\frac{596.5}{88}}=(-8.42,11.38)$
+```{r}
+ME <- qt(0.995, df=n1+n2-2)*sqrt(sp^2/n1 + sp^2/n2)   # Margin of Error
+(yb1-yb2) +c(-ME,ME)                                  # 99% CI
+```
+
+Is the difference significantly non-zero?
+
+***
+
+#### Hypothesis Testing
+
+**Step 1**: See above, assuming the two populations (those on treatment A and those on B) are independent.
+
+**Step 2**: $H_0: \delta=0$ vs $H_A:\delta\ne 0$, where $\delta=\mu_1-\mu_2$ is the unknown difference in mean change in LDL between the two treatments.
+
+**Step 3**:
+$$T=\frac{(\bar{Y_1}-\bar{Y_2})-\delta_0}{\sqrt{S_p^2/n_1+S_p^2/n_2}}\sim t_{n_1+n_2-2} \textrm{ under } H_0.$$
+
+**Step 4**:
+$$T=\frac{(1.126-(-0.352))-0}{\sqrt{596.5/78+596.5/88}}=0.389$$
+```{r}
+(TT <- (yb1-yb2)/sqrt(sp^2/n1 + sp^2/n2))
+```
+
+The p-value is 0.698.
+```{r}
+2*pt(TT, df=n1+n2-2, lower.tail=FALSE)
+
+
+```
+  
+**Step 5**: Fail to reject $H_0$ and conclude that there is insufficient evidence that the mean change in LDL is different across treatments. 
+
+***
+
+
+## Two-Sample Test with Unknown, Unequal Variance
+
+When the two population variances are not equal, it doesn’t make sense to pool the sample variances into one estimate. 
+
+A logical quantity would then be
+
+$$T = \frac{(\bar{Y_1} - \bar{Y_2}) - \delta_0}{\sqrt{S_1^2/n_1 + S_2^2/n_2}}$$
+
+However, now $T$ does not follow a $t_{n_1+n_2-2}$ distribution.
+
+The exact degrees of freedom are unknown and approximated by Satterthwaite. Thus $T$ has an approximate $t_\nu$ distribution, where 
+$$v = \frac{(v_1 + v_2)^2}{\frac{v_1^2}{n_1 - 1} + \frac{v_2^2}{n_2 - 1}} \textrm{  and  } v_i=\frac{s_i^2}{n_i} \textrm{ for } i=1,2$$ 
+The $t_ν$ distribution is then used to construct CIs and perform hypothesis testing.
+
+
+Case #3: Repeat treatment A and B comparison example assuming unequal variances.
+
+**Step 1:** See above, but assuming the two population variances are assumed unequal.
+
+**Step 2:** H_0: $\delta=0$ vs H_A: $\delta \ne 0$ (as above).
+
+**Step 3:**
+$$T = \frac{(\bar{Y_1} - \bar{Y_2}) - \delta_0}{\sqrt{S_1^2/n_1 + S_2^2/n_2}} \sim t_\nu \textrm{ under } H_0$$
+$$v = \frac{(s_1^2/n_1  + s_2^2/n_2)^2}{\frac{(s_1^2/n_1)^2}{n_1 - 1} + \frac{(s_2^2/n_2)^2}{n_2 - 1}} =  \frac{(584.12/78  + 607.47/88)^2}{\frac{(584.12/78)^2}{78 - 1} + \frac{(607.47/88)^2}{88 - 1}} = 162.32$$
+```{r}
+n1 <- sum(datAB$Arm=="A")
+yb1 <- mean(datAB$LDLchg[datAB$Arm=="A"])
+v1 <- var(datAB$LDLchg[datAB$Arm=="A"])
+n2 <- sum(datAB$Arm=="B")
+yb2 <- mean(datAB$LDLchg[datAB$Arm=="B"])
+v2 <- var(datAB$LDLchg[datAB$Arm=="B"])
+
+nu <- (v1/n1+v2/n2)^2 / ((v1/n1)^2/(n1-1) + (v2/n2)^2/(n2-1)) 
+nu
+```
+
+
+**Step 4:** 
+$$T = \frac{1.126 - (- 0.352) - 0}{\sqrt{584.12/78 + 607.47/88}} = 0.390 $$
+```{r}
+TT <- (yb1-yb2) / sqrt(v1/n1 + v2/n2)        # Step 5 (test statistic)
+TT
+```
+
+The p-value is 0.697.
+```{r}
+2*pt(TT, df=nu, lower.tail=FALSE)              # p-value
+```
+
+**Step 5:** Fail to reject $H_0$ and conclude there is insufficient evidence that the mean change in LDL is different across treatments. 
+
+***
+### Two-Sample T-Test in R
+
+
+`t.test(x, y=NULL,`
+
+&nbsp;&nbsp;&nbsp; `alternative=c("two.sided", "less", "greater"),`
+    
+&nbsp;&nbsp;&nbsp; `mu=0, paired=FALSE, var.equal=FALSE,`
+    
+&nbsp;&nbsp;&nbsp; `conf.level=0.95)`
+
+
+`x`: vector of data from population 1
+
+`y`: vector of data from population 2
+
+`alternative`: choose `two-sided` for $H_A:\mu_1\ne \mu_2$; `less` for $H_A:\mu_1\lt \mu_2$, and `greater` for $H_A:\mu_1\gt \mu_2$.
+
+`mu`: desired difference given as $\delta_0$.
+
+`var.equal`: does $\sigma_1^2=\sigma_2^2$? Choose `TRUE` if variances are assumed equal, `FALSE` otherwise
+
+`paired` to be discussed later; just use `FALSE` for this test
+
+<br>
+
+Alternatively, if the data are in a data.frame with one column for the continuous values, and another column indicating the group, then
+
+`t.test(formula, data, subset, ...)`
+
+`formula`: given in the form `val~grp`, where `val` is the column name indicating the continuous values, and `grp` is the column name of the grouping variable
+
+`data`: the name of the data.frame where `val` and `grp` live
+
+`subset`: optionally subset the data.frame
+
+`...`: arguments given on the previous page
+
+```{r}
+t.test(LDLchg~Arm, data=datAB, alternative="two.sided", mu=0, paired=FALSE,
+    var.equal=TRUE, conf.level=0.95)
+t.test(LDLchg~Arm, data=datAB, alternative="two.sided", mu=0, paired=FALSE,
+    var.equal=FALSE, conf.level=0.95)
+```
+
+***
+
+## Comparison of Two Variances {.tabset}
+
+When should we safely assume $\sigma_1^2=\sigma_2^2$?
+
+Use a rule of thumb:
+
+1. If the ratio of the variances is $\ge 3$ (with larger variance in the numerator), use the formula for unequal variance. Otherwise, use the formula for equal variance. Note: Some use a ratio $\ge 2$.
+
+2. If the decision (i.e. reject or fail to reject) is the same, then it doesn’t matter either way.
+
+3. If the decision conflicts, then it depends...
+    
+    a. Make less assumptions about the data – use unequal variance test
+    b. Use the conservative test (the one that fails to reject)
+    c. Present both, one as the main analysis, and the other as sensitivity
+	
+Or, use a statistical test – variance ratio test.
+
+
+### Variance Ratio Test for Comparing Variances
+
+`var.test(x, y, ratio=1,`
+
+&nbsp;&nbsp;&nbsp; `alternative = c("two.sided", "less", "greater"),`
+    
+&nbsp;&nbsp;&nbsp; `conf.level=0.95, ...)`
+
+`x`: vector of data from population 1
+
+`y`: vector of data from population 2
+
+`ratio`: the desired ratio to test under the null
+
+`alternative`: choose two-sided for $H_A:\sigma_1^2 \neq \sigma_2^2$, less for$H_A:\sigma_1^2 < \sigma_2^2$, and greater for $H_A:\sigma_1^2 > \sigma_2^2$
+
+<br>
+
+Alternatively,
+
+`var.test(formula, data, subset, na.action, ...)`
+
+
+
+```{r}
+var.test(LDLchg~Arm, data=datAB, ratio=1, alternative="two.sided")
+```
+***
+### Caution with Variance Ratio Test 
+
+- Recall that just because there is insufficient evidence to reject the null, that doesn’t mean the null is true. If the variance ratio test fails to reject, the test simply might not have enough power to detect the difference in variances.
+
+- On the flip side, as with any hypothesis test, larger sample sizes yield greater power to detect small deviations from $H_0$. Sometimes, this extra sensitivity for large degrees of freedom (large $n$) will suggest using Satterthwaite when the variances are not very different.
+
+- **Therefore, don’t rely solely on a significance test to decide whether or not to assume equal variances. It’s just one tool (of many) to aid your choice.**
+
+- You may also consider the rule of thumb, previous literature, or clinical observations to help you decide.
+
+**This F test is very sensitive to the normality assumption.** It does not work as expected when the data are very skewed.
+
+***
+## Two-Sample Test of Proportions
+
+Let Population 1 have a $\textrm{Bern}(\pi_1)$ distribution and let $Y_{11}, Y_{12}, \ldots,Y_{1n_1}$ be a random sample.
+
+Let Population 2 have a $\textrm{Bern}(\pi_2)$ distribution and let $Y_{21},Y_{22},\ldots,Y_{2n_2}$ be a random sample.
+
+We will assume the sample sizes $n_1$ and $n_2$ are large enough for normal theory to hold, e.g., $n_1\pi_1(1-\pi_1)$, and $n_2\pi_2(1-\pi_2)$ are both $\ge 5$.
+
+The goal is to estimate and test the difference $\delta = \pi_1 - \pi_2$.  
+
+
+### Point estimate for $\delta = \pi_1 - \pi_2$
+
+Let
+
+$$p_1 = \frac{1}{n_1}\sum_{i=1}^{n_1} Y_{1i} \ \textrm{ and } \ p_2 = \frac{1}{n_2}\sum_{i=1}^{n_2} Y_{2i}.$$
+
+We will use the difference is sample proportions i.e. $D=p_1 - p_2$. 
+
+### Distribution of D 
+
+By CLT and Slutsky's, $p_1$ is approximately $N(\pi_1,\pi_1 (1-\pi_1)⁄n_1 )$ and $p_2$ is approximately $N(\pi_2,\pi_2 (1-\pi_2)⁄n_2 )$.
+
+Thus, the difference $D$ is approximately
+$$N\left( \pi_1 - \pi_2, \frac{\pi_1(1-\pi_1)}{n_1} + \frac{\pi_2(1-\pi_2)}{n_2} \right)$$ 
+
+Note that this is very similar to the difference in means. 
+
+### Confidence Interval for D 
+
+A two-sided $100(1-\alpha)$ % CI has the form 
+$$(p_1 - p_2) \pm z_{1-\frac{\alpha}{2}}\sqrt{\frac{p_1(1-p_1)}{n_1} + \frac{p_2(1-p_2)}{n_2}}$$
+
+### Example
+
+Case #4
+
+- Assume that virologic control among those adherent is $\textrm{Bern}(\pi_1)$.
+
+- Assume that virologic control among those non-adherent is $\textrm{Bern}(\pi_2)$.
+
+Of $n_1=282$ individuals who were adherent at baseline, 115 had virologic control over follow-up. Of $n_2=36$ individuals who were non-adherent at baseline, 4 had virologic control over follow-up.
+```{r}
+addmargins(table(Case2VC$NonAdhBL, Case2VC$VC, exclude=NULL))
+n1 <- 282     # adherent
+p1 <- 115/n1  # VC among adherent
+n2 <- 36      # non-adherent
+p2 <- 4/n2    # VC among non-adherent
+
+```
+
+A 95% CI for the difference in proportion is
+$$(0.407 - 0.111) \pm 1.96\sqrt{\frac{(0.407)(1-0.407)}{282} + \frac{(0.111)(1-0.111)}{36} } = (0.18, 0.41)$$
+```{r}
+(p1-p2)+qnorm(c(0.025, 0.975))*sqrt(p1*(1-p1)/n1 + p2*(1-p2)/n2)
+```
+
+<br>
+
+A hypothesis test for the difference in proportion is as follows:
+
+**Step 1**: See above. Assume the sample proportions are both approximately normally distributed due to large sample size and rule of thumb (but note that those non-adherent don't satisfy the rule of thumb).
+
+**Step 2**: $H_0: \delta=0$ vs $H_A:\delta \ne 0$, where $\delta = \pi_1 - \pi_2$ is the unknown difference in proportion of virologic control between those adherent and non-adherent.
+
+**Step 3**: The standard error of the test statistic depends on a pooled estimate of the variance because the null hypothesis is that the two population proportions are equal and we have two estimates of the common proportion. Define 
+
+$$\bar{p} = \frac{\sum_{i=1}^{n_1} Y_{1i} + \sum_{i=1}^{n_2} Y_{2i}}{n_1 + n_2} = \frac{n_1 p_1 + n_2p_2}{n_1 + n_2}$$
+```{r}
+pb <- (n1*p1+n2*p2)/(n1+n2)                  # Step 3: p bar
+pb
+```
+Then the test statistic is
+$$Z = \frac{p_1 - p_2 - 0}{\sqrt{\frac{\bar{p}(1-\bar{p})}{n_1} + \frac{\bar{p}(1-\bar{p})}{n_2}} } \sim N(0,1) \textrm{ under } H_0$$
+
+**Step 4**:
+$$Z = \frac{0.407 - 0.111 - 0}{\sqrt{\frac{(0.374)(1-0.374)}{282} + \frac{(0.374)(1-0.374)}{36} } } = 3.464$$
+```{r}
+ZZ <- (p1-p2)/sqrt(pb*(1-pb)*(1/n1 + 1/n2))  # Step 4: Test statistic
+ZZ
+```
+
+The p-value is < 0.001.
+```{r}
+2*pnorm(ZZ, lower.tail=FALSE)                # P-value
+prop.test(x=c(n1*p1,n2*p2), n=c(n1,n2), conf.level=0.95, correct=FALSE)
+```
+(Note that $Z^2∼\chi_1^2$, thus $(3.464)^2=12$.
+
+**Step 5**: Reject $H_0$ and conclude that the proportion of virologic control among those adherent and those non-adherent are significantly different.
+
+
+***
+
+## Hypothesis Test for 3+ Populations 
+
+Use one-way ANOVA to test $H_0: \mu_1=\mu_2=\mu_3$ vs. $H_A$: at least one not equal. 
+
+This test typically assumes normality and equal variance of the populations. The test statistic is a ratio of two variances and has an $F$ distribution under the null.
+
+The technical details are omitted for time, but – think of this test as an extension of the equal variance t-test just discussed. (The t-test is a special case when there are two populations.)
+
+<br>
+
+`oneway.test(formula, data, subset, na.action, var.equal = FALSE)`
+
+`formula`: given in the form `val~grp`, where `val` is the column name indicating the continuous values, and `grp` is the column name of the grouping variable
+
+`data`: the name of the data.frame where `val` and `grp` live
+
+`subset`: optionally subset the data.frame
+
+`var.equal`: indicate whether to treat the variances as equal
+
+
+```{r}
+oneway.test(LDLchg~Arm, data=Case1LDL)
+```
+
+
+
+***
+
+# Power and Sample Size 
+
+## The Power of a Test {.tabset}
+
+A Type II error occurs when we fail to reject $H_0$ when $H_A$ is true; the probability of this is denoted by $\beta$.
+
+The power of a test is the probability of rejecting $H_0$ when $H_A$ is true; this is $1-\beta$.
+
+The power depends on several factors:
+
+1. The hypothesized value of the parameter of interest under $H_A$ (e.g., $\mu_A$)
+2. The hypothesized value of the parameter under $H_0$ (e.g., $\mu_0$)
+3. The tolerance for a Type I error ($\alpha$)
+4. The sample size ($n$)
+5. Variability of the data (variance $\sigma^2$)
+6. The test statistic (and sampling distribution) that will be used
+
+For fixed $\alpha$ and $n$, compute the power for several values of the parameter, given $H_0$ is false. This results in a power function, the graph of which is called a power curve.
+
+### Example: Population Mean
+
+Suppose we want to design a study to determine if a novel HIV treatment also has an effect on secondary endpoints, specifically change in triglycerides. If the drug changes triglyceride levels by **10** mg/dL, we want to be able to detect that change statistically. We plan on doing a **one sample t-test** in our final analyses.
+
+A previous trial testing a similar medication in a similar population showed a mean $\pm$ SD change in triglycerides of 15 $\pm$ **80** mg/dL. How much power would we have to test $H_0:\mu=0 \textrm{ vs } H_A:\mu \ne 0$, given a significance level of **0.05** and a sample size of **300**? 
+
+
+Even though we will do a t-test in our final analyses, power calculations by hand are made *much* easier using a normal distribution. Let
+$$Z = \frac{\bar{Y} - \mu_0}{\sigma/\sqrt{n}} \sim N(0,1) \textrm{ under } H_0.$$ 
+This is like a t-statistic, except we pretend that $\sigma^2$ is known instead of using the estimator $S^2$.
+
+The probability of a Type II error is defined as:
+$$ \beta = P(\textrm{fail to reject } H_0|H_A \textrm{ is true}) =P(Z \textrm{is not in rejection region }|H_A \textrm{ is true})$$
+Thus
+$$\beta=P(z_{\frac{\alpha}{2}} \le Z \le z_{1-\frac{\alpha}{2}}│H_A \textrm{ is true}) = P\left( z_{\frac{\alpha}{2}} \le \frac{Y - \mu_0}{\sigma⁄\sqrt{n}} \le z_{1-\frac{\alpha}{2}}│H_A \textrm{ is true} \right) $$
+Solving for $\bar{Y}$ will yield
+$$\beta = P \left( \mu_0 - z_{1-\frac{\alpha}{2}} \frac{\sigma}{\sqrt{n}} \le \bar{Y} \le \mu_0 +  z_{1-\frac{\alpha}{2}} \frac{\sigma}{\sqrt{n}} | H_A \textrm{ is true} \right)$$
+
+Under the alternative, $\bar{Y} \sim N(\mu_A, \sigma^2/n)$, where $\mu_A$, is the true (unknown) population mean, that is not equal to $\mu_0$ (because we are conditioning on $H_0$ being false). For different values of $\mu_A$, we can compute $\beta$, and hence, $1-\beta$. 
+
+Let $\mu_A = 10$. Then 
+
+$$\beta = P \left( 0 - 1.96\frac{80}{\sqrt{300}} \le \bar{Y} \le 0 + 1.96\frac{80}{\sqrt{300}} \Bigg| \mu = 10 \right)$$
+$$= P(-9.05 \le \bar{Y} \le 9.05| \mu = 10) = 0.419.$$ 
+```{r}
+mu0 <- 0;  mu1 <- 10;  sig <- 80;  nn <- 300; SE <- sig/sqrt(nn)
+upp <- mu0+qnorm(0.975)*SE    # upper bound
+low <- mu0-qnorm(0.975)*SE    # upper bound
+b <- pnorm(upp, mean=mu1, sd=sig/sqrt(nn)) - pnorm(low, mean=mu1, sd=sig/sqrt(nn))
+b
+```
+
+The power is $1-\beta = 0.581$.
+```{r}
+b <- pnorm(upp, mean=mu1, sd=sig/sqrt(nn)) - pnorm(low, mean=mu1, sd=sig/sqrt(nn))
+1-b
+```
+
+<br>
+
+$(\bar{Y}-\mu_A)/\dfrac{\sigma}{\sqrt{n}}$ follows $N(0,1)$ under $H_A$, therefore
+
+$$\beta=P\left(\dfrac{\mu_0-\mu_A}{\sigma/\sqrt{n}}- z_{1-\frac{\alpha}{2}} \leq N(0,1)\leq \dfrac{\mu_0-\mu_A}{\sigma/\sqrt{n}}+ z_{1-\frac{\alpha}{2}}\right)$$
+**Power is $1-\beta$, and is larger if**
+
++ Sample size $n$ is larger
++ Type I error $\alpha$ is larger
++ Population variance $\sigma$ is smaller
++ $|\mu_A-\mu_0|$ is larger
+
+
+```{r}
+XX0 <- seq(-3*SE, 3*SE, l=100)  # mu=0
+XX1 <- seq(-3*SE+10, 3*SE+10, l=100)  # mu=10
+XX2 <- seq(-3*SE+15, 3*SE+15, l=100)  # mu=15
+XX3 <- seq(-3*SE-15, 3*SE-15, l=100)  # mu=-15
+
+par(mfrow=c(3,1))
+plot(XX1, dnorm(XX1, mu1, SE), type="l", lwd=5, cex=1.3, cex.lab=1.3,
+    cex.axis=1.3, cex.main=1.5, xlab=expression(bar(Y)*" value"),
+    ylab=expression(mu*" = 10"), xlim=c(-3*SE,3*SE+20))
+  xcord <- c(min(XX1), XX1, max(XX1))
+  ycord <- c(0, dnorm(XX1, mu1, SE), 0)
+  polygon(xcord, ycord, col="grey80", border=NA)
+  xcord <- c(min(XX1), seq(min(XX1),upp,l=99), upp)
+  ycord <- c(0, dnorm(seq(min(XX1),upp,l=99), mu1,SE), 0)
+  polygon(xcord, ycord, col="red", border=NA)
+  lines(XX1, dnorm(XX1, mu1, SE), lwd=5)
+  abline(h=0, lwd=2, lty=3)
+  abline(v=upp, lwd=2)
+mu2 <- 15
+plot(XX2, dnorm(XX2, mu2, SE), type="l", lwd=5, cex=1.3, cex.lab=1.3,
+    cex.axis=1.3, cex.main=1.5, xlab=expression(bar(Y)*" value"),
+    ylab=expression(mu*" = 15"), xlim=c(-3*SE,3*SE+20))
+  xcord <- c(min(XX2), XX2, max(XX2))
+  ycord <- c(0, dnorm(XX2, mu2, SE), 0)
+  polygon(xcord, ycord, col="grey80", border=NA)
+  xcord <- c(min(XX2), seq(min(XX2),upp,l=99), upp)
+  ycord <- c(0, dnorm(seq(min(XX2),upp,l=99), mu2, SE), 0)
+  polygon(xcord, ycord, col="red", border=NA)
+  lines(XX2, dnorm(XX2, mu2, SE), lwd=5)
+  abline(h=0, lwd=2, lty=3)
+  abline(v=upp, lwd=2)
+mu3 <- -15
+plot(XX3, dnorm(XX3, mu3, SE), type="l", lwd=5, cex=1.3, cex.lab=1.3,
+    cex.axis=1.3, cex.main=1.5, xlab=expression(bar(Y)*" value"),
+    ylab=expression(mu*" = -15"), xlim=c(-3*SE-20,3*SE))
+  xcord <- c(min(XX3), XX3, max(XX3))
+  ycord <- c(0, dnorm(XX3, mu3, SE), 0)
+  polygon(xcord, ycord, col="red", border=NA)
+  xcord <- c(-upp, seq(-upp,min(XX3),l=99), min(XX3))
+  ycord <- c(0, dnorm(seq(-upp,min(XX3),l=99), mu3, SE), 0)
+  polygon(xcord, ycord, col="grey80", border=NA)
+  lines(XX3, dnorm(XX3, mu3, SE), lwd=5)
+  abline(h=0, lwd=2, lty=3)
+  abline(v=-upp, lwd=2)  
+
+```
+
+Below is a power curve plot for different sample sizes
+```{r}
+#--------------  Function to compute power for different mu1  --------------#
+power.curve <- function(muA, mu0, sig, nn, alpha=0.05){  # two sided
+    za2 <- qnorm(1-alpha/2)  # critical value
+    SE <- sig/sqrt(nn)       # standard error
+    low <- mu0-za2*SE        # lower bound
+    upp <- mu0+za2*SE        # upper bound
+    Pow <- 1-(pnorm(upp, mean=muA, sd=SE)- pnorm(low, mean=muA, sd=SE))
+    return(Pow)
+}
+#---------------------------------------------------------------------------#
+
+mu1 <- seq(-20, 20, l=50)
+Power <- power.curve(mu1, mu0=0, sig=80, nn=300, alpha=0.05)
+
+plot(mu1, Power, type="l", lwd=5, cex=1.3, cex.lab=1.3, cex.axis=1.3,
+    cex.main=1.5, xlab=expression("Alternative values of "*mu),
+    ylab=expression(1-beta), ylim=c(0,1), main="Power Curve")
+  points(c(10,15), power.curve(c(10,15), 0, 80, 300), col="red",
+      pch=16, cex=2)
+  lines(mu1, power.curve(mu1, mu0=0, sig=80, nn=200), lwd=2, lty=3,
+      col="red")
+  lines(mu1, power.curve(mu1, mu0=0, sig=80, nn=900), lwd=2, lty=2,
+      col="blue")
+  legend("bottomright", c("n=200", "n=400", "n=900"), col=c(2,1,4),
+      lty=c(3,1,2), lwd=2, bty="n", cex=1.2)
+```
+
+***
+
+### Example: Population Proportion 
+
+We hope to determine if the proportion of individuals in a population of interest having virologic control over follow-up is different from random chance, i.e., $H_0: \pi=0.5 \textrm{ vs } H_A:\pi \ne 0.5$. If the true proportion is 40%, we want to detect it. How much power would we have at the 0.05 significance level given a sample size of 300?
+
+To compute the Type II error for a two-sided test:
+
+$$\beta = P \left( z_{\alpha/2} \le \frac{\hat{p} - \pi_0}{\sqrt{\pi_0(1-\pi_0)/n}} \le z_{1-\alpha/2} \Bigg| H_A \textrm{ is true} \right)$$
+
+$$= P\left( \pi_0 - z_{1- \alpha/2}\sqrt{\frac{\pi_0(1-\pi_0)}{n}} \le \hat{p} \le \pi_0 + z_{1-\alpha/2}\sqrt{\frac{\pi_0(1-\pi_0)}{n}}  \Bigg| H_A \textrm{ is true} \right)$$
+Note that $\hat{p}$ is a sample mean, thus $\hat{p} \approx N(\pi_A, \pi_A(1-\pi_A)/n)$ under $H_A$. 
+ 
+ 
+ The power at a specific value $\pi_A$ can be computed. The power curve for different values of $pi_A$ can be plotted. For example,
+ $$P(0.443 \le \hat{p} \le 0.557 | p_A = 0.40) = 0.062.$$
+Thus, the power is $1-0.062 = 0.938$. 
+
+Below is the power curve for sample size of 300:
+```{r}
+lower_bound <- 0.5-qnorm(0.975)*sqrt(0.5*(1-0.5)/300)
+upper_bound <- 0.5+qnorm(0.975)*sqrt(0.5*(1-0.5)/300)
+1-(pnorm(upper_bound, mean=0.40,sd=sqrt(0.40*(1-0.40)/300))-
+    pnorm(lower_bound, mean=0.40,sd=sqrt(0.40*(1-0.40)/300)))
+```
+ 
+```{r}
+#---------------  Function to compute power for different p1  --------------#
+power.curve.p <- function(p1, p0, nn, alpha=0.05){
+    za <- qnorm(1-alpha/2)  # critical value
+    low <- p0-za*sqrt(p0*(1-p0)/nn)  # lower bound
+    upp <- p0+za*sqrt(p0*(1-p0)/nn)  # upper bound
+
+    Pow <- 1-(pnorm(upp, mean=p1, sd=sqrt(p1*(1-p1)/nn))-
+              pnorm(low, mean=p1, sd=sqrt(p1*(1-p1)/nn)))
+    return(Pow)
+}
+#---------------------------------------------------------------------------#
+p1 <- seq(0.35, 0.65, l=50)
+Power <- power.curve.p(p1=p1, p0=0.5, nn=300)
+
+power_df <- data.frame(cbind(p1, Power))
+
+ggplot(power_df, aes(p1, Power)) + 
+  geom_line(size=1) + 
+  geom_point(aes(x=0.4, y=power.curve.p(p1=0.40, p0=0.50, nn=300)), colour="red", size=3) + 
+  labs(x=expression("Alternative values of "*pi[A]),
+       y=expression(1-beta)) + 
+  theme_bw()
+```
+
+***
+
+### Computing Power in R 
+
+The `pwr` package contains many useful functions for computing the power for different types of tests.
+
+`pwr.norm.test(d = NULL, n = NULL, sig.level = 0.05, power = NULL,`
+
+&nbsp;&nbsp;&nbsp; `alternative = c("two.sided","less","greater"))`
+
+`d`: effect size given as $(\mu_A-\mu_0)/\sigma$.
+
+`n`: sample size $n$
+
+`sig.level`: desired $\alpha$
+
+`power`: leave as NULL to obtain power
+
+```{r}
+mu0 <- 0;  mu1 <- 10;  sig <- 80;  nn <- 300  # Set values
+pwr.norm.test(d=(mu1-mu0)/sig, n=nn, sig.level=0.05, power=NULL,
+    alternative="two.sided")
+
+dd <- (seq(-20, 20, l=50)-mu0)/sig
+Power <- pwr.norm.test(d=dd, n=nn, sig.level=0.05, power=NULL,
+    alternative="two.sided")
+
+plot(seq(-20, 20, l=50), Power$power, type="l", lwd=5, cex=1.3, cex.lab=1.3,
+    cex.axis=1.3, cex.main=1.5, xlab=expression("Alternative values of "*mu),
+    ylab=expression(1-beta), ylim=c(0,1), main="Power Curve")
+```
+
+`pwr.p.test`: one-sample proportion test
+
+`pwr.2p.test`: two-sample proportion test
+
+`pwr.2p2n.test`: two-sample proportion test (unequal sample sizes)
+
+`pwr.t.test`: two-sample, one-sample and paired t-tests
+
+`pwr.t2n.test`: two-sample t-tests (unequal sample sizes)
+
+`pwr.anova.test`: one-way balanced ANOVA
+
+`pwr.r.test`: correlation test
+
+`pwr.chisq.test`å: chi-squared test (goodness of fit and association)
+
+`pwr.f2.test`: test for the general linear model
+
+
+***
+
+## Sample Size Estimation {.tabset}
+
+Before starting a study, a common question is “How large of a sample size is needed?”
+
+Things that motivate an answer to this question:
+
+1. What null and alternative hypothesis does the researcher want to test?
+
+2. What is the smallest deviation from the null hypothesis that the researcher wants to be able to detect?
+
+3. Should it be a one-sided test or two-sided test? Even if the researcher expects to see a difference in one direction, what if it turned out to be in the other?
+
+For the statistician:
+
+4. What is the study design and what do you know about the underlying population distribution? What statistical test will be performed?
+
+5. If a mean parameter is being tested, can we get an estimate of the population standard deviation?
+
+6. How tightly controlled should the Type I and Type II errors be? Common practice is to plan for a two-sided α=0.05 test with power of at least 80%.
+
+### Example: Population Mean
+
+
+Recall that of interest is mean change in triglycerides after a new HIV treatment. Assume mean change for this population is approximately normal with unknown $\mu$ and $\sigma^2$. 
+
+**Type I Error Rate and Choice of Hypotheses**
+
+The hypotheses are $H_0: \mu=0$ vs $H_A:\mu \ne 0$ at significance level $\alpha=0.05$.
+
+**Minimum Effect Size of Interest**
+
+A 10 mg/dL change is clinically relevant. That is, if the true mean change in triglycerides is 10 mg/dL, we want to be able to detect it. 
+
+**Choice of Type II Error / Power** 
+
+Power is the probability of rejecting the null when the alternative is true. Generally want high power to detect the alternative, say, 90%. 
+
+**Estimating the Variance**
+
+Notice that in the power examples, the population standard deviation $\sigma$ was assumed to be known. In general, some knowledge of $\sigma$ is needed to perform power and sample size calculations. 
+
+- **Previous studies**: other similar studies may give estimates of $\sigma$ that can be used for power and sample size calculations.
+
+- **Pilot study**: the researcher could draw a small preliminary sample from the population of interest and get a rough estimate of $\sigma$ from this sample.
+
+- **Range of population**: note that for a normal distribution, the range is approximately 6 standard deviations (>99% of the data fall within 3 standard deviations of the mean). If there is knowledge of the minimum and maximum values and the population is approximately normal, then a rough estimate of $\sigma$ could be the range divided by 6.
+
+We can use previous literature which reported a standard deviation of 80 as the estimate of $\sigma$.
+
+
+**$t$ or Normal Distribution?**
+
+To perform a one-sample t-test, the sampling distribution under $H_0$ is $t_{n-1}$. Thus, we should use a $t$ distribution to compute the sample size. But notice that the $t$ distribution changes as the sample size changes (i.e. $t_{n-1}$). Thus, we would have to use software to do sample size calculations recursively based on this distribution. 
+
+To simplify things, assume $\sigma=80$ and base sample size calculations on the normal distribution.
+
+$t_{n-1} \approx N(0,1)$ for large enough n.
+
+Note: The final test of the study would still be a t-test.
+
+***
+
+#### General Formula
+
+A two-sided, one sample t-test with Type I error $\alpha$ and Type II error $\beta$ designed to detect a minimum difference of $|\mu_A-\mu_0 |$ will need a sample size of 
+$$n=\left[ \frac{(z_{1-\alpha/2}+z_{1-\beta})\sigma)}{\mu_A-\mu_0 } \right]^2.$$ 
+
+Always **round the sample size up to the nearest whole number**.
+
+For a two sided test in the triglycerides example:
+
+$$n=\left[ \frac{(1.96+1.282)(80)}{10-0} \right]^2=672.68 \approx 673$$
+**The required sample size is smaller if**
+
++ $\mu_A-\mu_0$ is larger
++ power $1-\beta$ is smaller, i.e. type II error $\beta$ is larger
++ type I error $\alpha$ is larger
++ population variance is smaller
+
+
+***
+
+
+### Example: Population Proportion
+
+What sample size would be needed to have 90% power to detect an alternative proportion of 0.40 if the null proportion is 0.5 and $\alpha=0.05$?
+
+The sample size formula for a proportion (using normal theory) is:
+
+$$n = \frac{\pi_0(1-\pi_0) \left[ z_{1-\alpha/2} + z_{1-\beta} \sqrt{\frac{\pi_A(1-\pi_A)}{\pi_0(1-\pi_0)}} \right]^2  }{(\pi_A-\pi_0)^2}$$
+
+$$n = \frac{(0.5)(1-0.5) \left[ 1.96 +1.28 \sqrt{\frac{(0.4)(1-0.4)}{(0.5)(1-0.5)}} \right]^2  }{(0.4-0.5)^2} = 258.5 \approx 259$$
+```{r}
+# write a function
+getNprop <- function(p0, p1, alpha=0.05, power=0.8){
+    acrit <- qnorm(1-alpha/2)
+    bcrit <- qnorm(power)
+    p0*(1-p0)*(acrit+bcrit*sqrt(p1*(1-p1)/(p0*(1-p0))))^2 / (p1-p0)^2
+}
+getNprop(p0=0.5, p1=0.4, alpha=0.05, power=0.9)
+```
+
+
+
+### Computing Sample Size in R 
+
+`pwr.norm.test(d = NULL, n = NULL, sig.level = 0.05, power = NULL,`
+
+&nbsp;&nbsp;&nbsp; `alternative = c("two.sided","less","greater"))`
+
+`d`: effect size given as $(\mu_A-\mu_0)/\sigma$.
+
+`n`: leave as NULL to obtain sample size
+
+`sig.level`: desired $\alpha$
+
+`power`: power of the test, given as $1-\beta$
+
+`pwr.t.test`: two-sample, one-sample and paired t-tests
+
+`pwr.p.test`: one-sample proportion test
+
+`pwr.2p.test`: two-sample proportion test
+
+<br>
+
+Normal example:
+
+```{r}
+# write a function
+#---------------------------------------------------------------------------#
+getN <- function(muA, pow, mu0, sig, alpha=0.05){
+    acrit <- qnorm(1-alpha/2)
+    bcrit <- qnorm(pow)
+    ((acrit+bcrit)*sig/(muA-mu0))^2
+}
+#---------------------------------------------------------------------------#
+getN(muA=10, pow=0.9, mu0=0, sig=80, alpha=0.05)
+
+# or use R function
+pwr.norm.test(d=(10-0)/80, n=NULL, sig.level=0.05, power=0.9,
+    alternative="two.sided")
+
+# More conservative, use software with t-distribution
+pwr.t.test(n=NULL, d=(10-0)/80, sig.level=0.05, power=0.90,
+              type="one.sample", alternative="two.sided")
+```
+
+<br>
+
+One sample proportion example:
+
+```{r}
+pwr.p.test(h=ES.h(0.5,0.4), sig.level=0.05, power=0.9, alternative="two.sided")
+```
+
+
+***
+
+

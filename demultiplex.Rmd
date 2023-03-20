@@ -1,0 +1,224 @@
+---
+title: Demultiplex FASTQs
+output: html_document
+---
+
+
+# Setup
+
+First we load libraries.
+
+```{r, libraries}
+library(readr)
+library(fs)
+library(dplyr)
+library(tibble)
+library(Biostrings)
+library(tools)
+library(stringr)
+library(here)
+```
+
+## Paths, Directories, and Shell Variables
+To keep the code readable and portable, it is nice to assign paths to variables.  We also need to use the R `Sys.setenv` command to make shell variables that can be used in the bash chunks below.
+
+
+```{r, files_and_directories}
+"content/atacama/config.R" %>%
+    here() %>%
+    source()
+
+# make directory for output
+if (dir_exists(demux_dir)) {dir_delete(demux_dir)}
+dir_create(demux_dir)
+```
+
+## Check Data Integrity
+
+```{r}
+rawdata_md5sum %>%
+    read_delim(delim=" ", 
+               trim_ws = TRUE,
+               col_names = c("md5sum", "filename")) ->
+    atacama_md5
+
+rawdata_dir %>%
+    list.files(full.names = TRUE) %>%
+    md5sum %>%
+    enframe %>%
+    dplyr::rename(fullpath=name, observed_md5=value) %>%
+    mutate(filename=basename(fullpath)) %>%
+    right_join(atacama_md5, by="filename") %>%
+    mutate(match=identical(md5sum,observed_md5)) ->
+    md5check
+
+md5check
+
+
+md5check %>%
+    pull(match) %>%
+    all ->
+    all_md5s_ok
+
+stopifnot(all_md5s_ok)
+```
+
+# Demultiplexing
+We will be using `fastq-multx` to demultiplex the data.  It does not have very good documentation.  But, we can get some instructions if we run it without any command line options.
+
+```{r}
+system2(command="fastq-multx",
+        args="-h",
+        stdout=TRUE, stderr = TRUE) %>%
+    cat(fill=TRUE)
+```
+
+## Barcode Table
+The `fastq-multx` help tells us that we can supply it with a tab-separated file specifying the sample ID in the first column and the barcode sequence that corresponds with it in the second column.  We can easily generate a file like this from our map file using a bit of tidyverse magic.  First we load the map file into a dataframe (skipping the extra header line that starts with "#q2").
+
+```{r}
+read_tsv(map_file, comment= "#q2") ->
+    atacama_metadata
+atacama_metadata
+```
+
+Now we want to output the `#SampleID` and `BarcodeSequence` columns to a new barcode file (without column names)
+
+```{r}
+atacama_metadata %>% # read in map file, dropping the line that starts with "#q2"
+  select(Sample = `sample-id`, 
+         BarcodeSequence=`barcode-sequence`) %>%
+  write_delim(barcode_table,        # output barcodes to a file 
+              delim="\t", 
+              col_names=FALSE)
+```
+
+## Running fastq-multx
+We now have everything we need to run `fastq-multx`.  Here is an explanation for the command line options that we use
+
+-m : number of mismatches to allow in barcode (relative to the barcode supplied in the barcode table)
+-x : don’t trim barcodes (this isn't necessary)
+-B BARCODE_FILE : a list of known barcodes, and the associated sample names
+-d : minimum edit distance between the best and next best match
+BARCODE_FASTQ : the index read FASTQ, which will be used to demultiplex other reads
+R1_FASTQ : the R1 raw data to demultiplex
+R2_FASTQ : (optional) if data is paired-end, the R2 raw data to demultiplex
+
+-o OUTPUT_FILE(s) : fastq-multx will produce a separate file for each barcode (two files when paired-end reads are input, three files when barcodes are in a separate I1 FASTQ). This option provides a template for naming the output file - the program will fill in the “%” with the barcode.
+
+Because of the way `fastq-multx` is designed (to allow demuxing of FASTQs that have the barcode embeded in the R1 sequence), it will actually demux the I1 FASTQ.  Since we are only interesed in the R1 and R2, we can ignore the demuxed I1 files.
+
+```{r}
+system2(stdout=TRUE, stderr = FALSE,
+        command="fastq-multx",
+        args=c("-m","3",
+               "-d","2",
+               "-x", 
+               "-B", barcode_table,
+               barcode_fastq,
+               r1_fastq,
+               r2_fastq,
+               "-o", file.path(demux_dir, "%_I1.fastq.gz"),
+               "-o", file.path(demux_dir, "%.forward.fastq.gz"),
+               "-o", file.path(demux_dir, "%.reverse.fastq.gz")
+               )) ->
+    demux_stdout
+
+cat(demux_stdout, fill=TRUE)
+```
+
+```{r}
+demux_stdout %>%
+    read_tsv(file=I(.),
+             skip=1) %>%
+  dplyr::rename(Id=1, Count=2, I1_path=3, R1_path=4, R2_path=5)->
+  reads_per_sample
+
+reads_per_sample
+```
+
+```{r}
+reads_per_sample %>%
+    mutate(groupval = 
+           ifelse(str_detect(Id,"unmatched|total"),
+                 Id,
+                 "sample")) %>%
+    group_by(groupval) %>%
+    summarise(Count=sum(Count))
+```
+
+## The Unmatched Problem
+### Reverse Complement the barcodes
+
+```{r}
+# clean up the output from the previous demultiplexing step
+if (dir_exists(demux_dir)) {dir_delete(demux_dir)}
+dir_create(demux_dir)
+```
+
+
+atacama_metadata %>% # read in map file, dropping the line that starts with "#q2"
+  select(Sample = `sample-id`, 
+         BarcodeSequence=`barcode-sequence`) %>%
+
+
+```{r}
+read_tsv(map_file, comment= "#q2") %>% # read in map file, dropping the line that starts with "#q2"
+  select(Sample = `sample-id`, 
+         BarcodeSequence=`barcode-sequence`) %>%          # select only the columns with sample ID (renamed to get rid of "#") and the barcode itself
+  deframe %>%                          # convert to a named vector (expected input for DNAStringSet constructor)
+  DNAStringSet %>%                     # convert to DNAStringSet
+  reverseComplement %>%                # reverse complement the barcodes
+  as.data.frame %>%                    # convert to dataframe for write_delim
+  rownames_to_column %>% 
+  write_delim(rc_barcode_table,        # output barcodes to a file 
+              delim="\t", 
+              col_names=FALSE)
+```
+
+### Run Demux with RC barcodes
+
+```{r}
+system2(stdout=TRUE, stderr = FALSE,
+        command="fastq-multx",
+        args=c("-m","3",
+               "-d","2",
+               "-x", 
+               "-B", rc_barcode_table,
+               barcode_fastq,
+               r1_fastq,
+               r2_fastq,
+               "-o", file.path(demux_dir, "%_I1.fastq.gz"),
+               "-o", file.path(demux_dir, "%.forward.fastq.gz"),
+               "-o", file.path(demux_dir, "%.reverse.fastq.gz")
+               )) ->
+    rc_demux_stdout
+
+cat(rc_demux_stdout, fill=TRUE)
+```
+
+```{r}
+rc_demux_stdout %>%
+  read_tsv(file=I(.), skip=1) %>%
+  dplyr::rename(Id=1, Count=2, I1_path=3, R1_path=4, R2_path=5)->
+    reads_per_sample_rc_barcode
+reads_per_sample_rc_barcode
+```
+
+```{r}
+reads_per_sample_rc_barcode %>%
+    mutate(groupval = 
+           ifelse(str_detect(Id,"unmatched|total"),
+                 Id,
+                 "sample")) %>%
+    group_by(groupval) %>%
+    summarise(Count=sum(Count))
+```
+
+# Session Info
+Always print `sessionInfo` for reproducibility!
+
+```{r}
+sessionInfo()
+```
+

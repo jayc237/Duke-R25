@@ -1,0 +1,322 @@
+---
+title: "Quantitative Methods for HIV Researchers"
+subtitle: "Base R Graphics"
+author: "Janice M. McCarthy, Modified Richard Barfield"
+date: "October 27, 2022"
+output: html_document
+---
+
+# R Graphics
+
+Ggplot2 is the best way to make pretty plots in R. Sometimes, however, we just want a quick peek at something. R base graphics can come in handy in these situations. We'll look at some base R graphics first, then move on to ggplot2. (This will also guarantee that you will appreciate the beauty of ggplot2.)
+
+
+## Base Graphics
+
+Base graphics come right out of the box, without loading any packages. The `plot` command is used to draw 2-d plots.
+
+### Scatter plot
+
+
+```{r}
+set.seed(12345)
+plot(1:10, 1:10)
+```
+
+#### Marker symbols
+
+
+```{r}
+plot(1:10, 1:10, pch=2)
+```
+
+#### Marker size
+
+
+```{r}
+plot(1:10, 1:10, pch=1:10, cex=2)
+```
+
+#### Marker colors
+
+
+```{r}
+plot(1:10, 1:10, pch=3, cex=2, col=1:10)
+```
+
+#### Adding text labels
+
+
+```{r}
+plot(1:10, 1:10, pch=4, col=4, xlim=c(0, 11))
+text(1:10+1, 1:10, letters[1:10])
+```
+
+### Line plot
+
+
+```{r}
+# Generate random data set to plot
+n <- 20
+x <- 1:n
+y <- x + rnorm(n)  # adds 'errors' from the standard normal distribution
+
+plot(x, y, type="l", lty=1, lwd=2, col="red",
+     main="Plot", xlab="Foo", ylab="Bar")
+points(x, y, col="blue")
+
+plot(x, y, type="l", lty=1, lwd=3, col="red",
+     main="Plot", xlab="Foo", ylab="Bar")
+points(x, y, col="blue")
+
+
+```
+
+Note that the function `points` adds points to the current plot. A new `plot` command will draw another plot. The function `abline` behaves similarly.
+
+```{r}
+m <- lm(y ~ x)   # linear fit of generated data. 
+
+
+plot(x, y, col="blue")
+abline(m, col="red", lty="dashed") # note that we are giving the function abline a fit object.
+
+abline(h=15,col="blue")
+# h horizontal
+```
+
+We can put multiple plots on the same axes:
+
+```{r}
+
+m <- lm(y ~ x)  
+
+plot(x, y, col="blue", pch=2)
+abline(m, col="red", lty="dashed") 
+
+y <- x + rnorm(10, mean = 0.1)
+m <- lm(y ~ x)  
+
+points(x, y, col="green", pch=4)
+abline(m, col="orange", lty=4) 
+```
+
+### Histogram
+
+This is probably the most useful base graphics function.
+
+```{r}
+hist(y)
+
+hist(y, breaks = 15)
+```
+
+### Barplot
+
+
+```{r}
+barplot(y)
+```
+
+
+```{r}
+g <- sample(1:3, n, replace=T)
+z <- rnorm(n)
+
+gl <-sample(LETTERS[1:3], n, replace=T)
+```
+
+
+```{r}
+boxplot(z ~ g)
+
+boxplot(z~gl)
+```
+
+### QQ plots
+
+QQ plots are quantile-quantile plots. Quantiles are just cut points for what values a distribution achieves a particular probability (e.g. quartiles would break a distribution into 4ths). The most common quantiles are percentiles, where a distribution is broken into 100 pieces. A qq plot plots the observed quantiles in the data against a known distribution (usually the normal distribution). If the data comes from the known distribution, we would expect the quantiles to lie on the diagonal $x = y$.
+
+First, let's generate 100 values from the standard normal.
+
+```{r}
+x <- rnorm(100)
+
+hist(x, breaks = 20)
+```
+
+We can see from the histogram that this looks approximately normal. The qq plot gives a more quantitative comparison, because each quantile is compared.
+
+```{r}
+qqnorm(x)
+qqline(x)
+```
+
+If we generate values from a different distribution, we should see a difference in the qq plot.
+
+```{r}
+y <- rgamma(100, shape=1)
+
+hist(y, breaks = 20)
+```
+
+
+```{r}
+qqnorm(y)
+qqline(y)
+```
+
+### Multiple plots
+
+We can set up multiple plots with
+
+`par(mfrow=c(#rows, #cols))`
+
+where plots will be placed by row first
+
+or 
+
+`par(mfcol=c(#rows, #cols))`
+
+where plots will be placed by column first.
+
+
+```{r,fig.width=6,fig.height=6}
+par(mfrow=c(2,2))
+  plot(x, y)
+  plot(x, y, type="l")
+  barplot(x)
+  barplot(y)
+par(mfrow=c(1,1)) 
+```
+
+### Saving plots
+
+Saving a plot involves 
+
+- opening a graphics file device using `png` (or `pdf`)
+- issuing plot commands
+- then closing the device with `dev.off()`.
+
+
+```{r,fig.height=6,fig.width=6}
+
+#create file directory "figs" before running code
+
+png('figs/lm.png')
+  m <- lm(y ~ x)
+  plot(x, y, col="blue")
+  abline(m, col="red", lty="dashed")
+dev.off()
+```
+
+### Read plot back in
+
+<img src="figs/lm.png" alt="Linear Model" width=400>
+
+## Exercises
+
+1. Plot a scatter plot of petal width vs petal length from the iris data set. (Recall that in base R, you can access the column for petal width using iris$Petal.Width.)
+
+```{r scatterplot iris}
+
+plot(iris$Petal.Length, iris$Petal.Width,
+     main="Iris Petal Length vs Width", xlab="Petal Length", ylab="Petal Width")
+
+```
+
+
+2. Add a best fit line to the plot.
+
+```{r best fit line}
+
+m <- lm (iris$Petal.Width ~ iris$Petal.Length)
+plot(iris$Petal.Length, iris$Petal.Width)
+abline(m)
+
+```
+
+
+3. Create a box plot of petal width by species and another box plot of petal length by species. Make these plots sit side-by-side.
+
+```{r boxplot}
+
+par(mfrow=c(1,2))
+
+boxplot(iris$Petal.Width~iris$Species)
+boxplot(iris$Petal.Length~iris$Species)
+
+par(mfrow=c(2,1))
+
+boxplot(iris$Petal.Width~iris$Species)
+boxplot(iris$Petal.Length~iris$Species)
+
+
+```
+
+
+4. Create a scatter plot of petal width vs length and color/change symbol by species.
+
+```{r}
+
+plot(iris$Petal.Width, iris$Petal.Length,
+    col=iris$Species,pch=as.character(iris$Species))
+
+
+newspecies.col=as.character(iris$Species)
+newspecies.col[iris$Species=="setosa"]<-"blue"
+newspecies.col[iris$Species=="versicolor"]<-"darkorange"
+newspecies.col[iris$Species=="virginica"]<-"pink"
+
+plot(iris$Petal.Length,iris$Petal.Width,col=newspecies.col)
+
+table(iris$Species)
+
+```
+
+
+5. Add best fit lines for each species to this plot. Don't forget to color code the lines. You may also play with changing the line types.
+
+```{r}
+
+m<- lm(iris$Petal.Width~iris$Petal.Length)
+
+m0 <- lm(Petal.Width~Petal.Length,data=iris,
+         subset = Species =="virginica")
+
+newspecies.col=as.character(iris$Species)
+newspecies.col[iris$Species=="setosa"]<-"blue"
+newspecies.col[iris$Species=="versicolor"]<-"darkorange"
+newspecies.col[iris$Species=="virginica"]<-"pink"
+
+plot(iris$Petal.Length,iris$Petal.Width,col=newspecies.col)
+abline(m0,col="pink")
+
+
+```
+
+
+6. Save this scatter plot to  a file called "figs/iris.png".
+
+```{r}
+
+png("figs/iris.png")
+
+
+
+
+```
+
+
+
+
+
+7. Read the plot file back in and display in the markdown.
+
+
+```{r}
+
+
+
+```
+

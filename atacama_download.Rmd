@@ -1,0 +1,111 @@
+---
+title: Download Atacama FASTQs
+output: html_document
+---
+
+# Paths, Directories, and Shell Variables
+To keep the code readable and portable, it is nice to assign paths to variables.
+
+```{r}
+library(tools)
+library(dplyr)
+library(tibble)
+library(readr)
+library(here)
+```
+
+```{r, files_and_directories}
+"content/atacama/config.R" %>%
+    here() %>%
+    source()
+
+Sys.chmod(rawdata_dir,mode = "755")
+dir.create(rawdata_dir, recursive = TRUE)
+Sys.chmod(data_dir,mode = "755")
+
+url_base = "https://data.qiime2.org/2022.8/tutorials/atacama-soils"
+data_urls = c(paste(url_base, "sample_metadata.tsv", sep="/"),
+              paste(url_base, paste0(atacama_data_percent,"p"), "forward.fastq.gz", sep="/"),
+              paste(url_base, paste0(atacama_data_percent,"p"), "reverse.fastq.gz", sep="/"),
+              paste(url_base, paste0(atacama_data_percent,"p"), "barcodes.fastq.gz", sep="/")
+              )
+```
+
+# Download Data
+https://docs.qiime2.org/2018.11/tutorials/atacama-soils/#subsample-data
+
+```{r}
+for(cur_url in data_urls){
+    dest_path=file.path(rawdata_dir, basename(cur_url))
+    download.file(cur_url, dest_path)
+    }
+file.info(list.files(rawdata_dir))
+```
+
+Generate md5sum for data
+```{r}
+tribble(
+    ~md5sum, ~filename,
+    "df32df8dc627319d7bc1d9ce49b89849","barcodes.fastq.gz",
+    "b5ee4718605158e5db91ef906fb61f62","forward.fastq.gz",
+    "2ac4ca47f39ebc9f517396c051257342","reverse.fastq.gz",
+    "380b04ad294f043b283ada11f42c011f","sample_metadata.tsv") ->
+    atacama_1pct_md5
+
+tribble(
+    ~md5sum, ~filename,
+    "69ee432d69147f70cc632fb237468af0","barcodes.fastq.gz",
+    "92e88db289364aaf38062acc9e47cbe5","forward.fastq.gz",
+    "5e3451ccda35aa44bd90f3848abad4c2","reverse.fastq.gz",
+    "380b04ad294f043b283ada11f42c011f","sample_metadata.tsv") ->
+    atacama_10pct_md5
+
+if("1"==atacama_data_percent){
+    cur_md5_tb = atacama_1pct_md5
+} else if ("10"==atacama_data_percent){
+    cur_md5_tb = atacama_10pct_md5
+} else {
+    stop("atacama_data_percent is neither 10 nor 1")
+}
+cur_md5_tb %>%
+    write_delim(rawdata_md5sum, col_names = FALSE)
+```
+
+```{r}
+list.files(rawdata_dir)
+```
+
+```{r}
+md5sum(list.files(rawdata_dir, full.names=TRUE))%>%
+    enframe %>%
+    dplyr::rename(observed_md5=value) %>%
+    mutate(filename=basename(name)) ->
+observed_md5
+
+left_join(cur_md5_tb, observed_md5, by="filename") %>%
+    mutate(match=identical(md5sum,observed_md5)) ->
+    md5check
+
+md5check %>%
+    pull(match) %>%
+    all ->
+    all_md5s_ok
+
+stopifnot(all_md5s_ok)
+```
+
+# Make the data directory read-only
+
+```{r}
+Sys.chmod(list.files(rawdata_dir),mode = "444")
+Sys.chmod(rawdata_dir,mode = "555")
+Sys.chmod(data_dir,mode = "555")
+```
+
+# Session Info
+Always print `sessionInfo` for reproducibility!
+
+```{r}
+sessionInfo()
+```
+

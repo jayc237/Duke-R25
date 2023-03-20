@@ -1,0 +1,289 @@
+---
+title: "Quantitative Methods for HIV Researchers"
+subtitle: "Practical Data Munging - HIV Example"
+author: "Cliburn Chan, Janice McCarthy"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Practical Data Munging
+
+
+```{r}
+library("tidyverse")
+library("readxl")
+```
+
+## Objective
+
+Suppose we want to visualize the change in deaths of PWH over time for transmission risk factors.
+
+## Get data and try to understand it
+
+
+```{r}
+df<- read_excel('files/deaths-of-persons-diagnosed-with-hiv-aids.xlsx')
+
+```
+
+
+```{r}
+df  %>% dim
+
+#dataframe dimensions
+```
+
+
+```{r}
+df %>% head(2)
+```
+
+
+```{r}
+df %>% tail(2)
+```
+
+
+```{r}
+df  %>% summary
+```
+
+
+```{r}
+df %>% str
+```
+
+## Pull out the transmission categories into separate data frames
+
+
+```{r}
+df  %>% select(Category) %>% distinct
+```
+Look at Current Gender and see what the groups are
+
+```{r}
+
+df %>% filter(Category == "Current Gender") %>% distinct()
+
+```
+
+Get a better look by using distinct on category and group
+```{r}
+df %>% distinct(Category, Group) %>% head(46)
+```
+
+```{r}
+df %>%
+filter(Category == "Transmission Category: Male Adult or Adolescent")  %>% 
+select(Year, -Category, "Transmission Category: Male Adult or Adolescent"=Group, Count) -> df_male
+
+df %>%
+filter(str_detect(Category, "Male")) 
+
+
+```
+
+
+```{r}
+df_male %>% head(8)
+```
+
+
+```{r}
+df %>%
+filter(Category == "Transmission Category: Female Adult or Adolescent")  %>% 
+    select(Year, -Category, "Transmission Category: Female Adult or Adolescent"=Group, Count) -> df_female
+```
+
+
+```{r}
+df_female %>% head(8)
+```
+
+
+```{r}
+df %>%
+   filter(Category == "Transmission Category: Child (<12 Years Old at the End of Year)")  %>% 
+   select(Year, -Category, "Transmission Category: Child (<12 Years Old at the End of Year)"=Group, Count) -> df_child
+```
+
+```{r}
+df_child
+```
+
+
+## Combine the transmission categories
+
+
+```{r}
+df_child %>% 
+     pivot_wider(names_from = "Transmission Category: Child (<12 Years Old at the End of Year)", values_from = Count) %>% 
+     mutate(Category="Child") -> df_child_wide
+#create one column called perinatal and reports count value
+#create a second column called category and reports "Child"
+
+df_child_wide
+```
+
+
+```{r}
+df_female  %>% 
+    pivot_wider(names_from = "Transmission Category: Female Adult or Adolescent", values_from = Count) %>%
+    mutate(Category="Female") -> df_female_wide
+
+df_female_wide
+```
+
+
+```{r}
+df_male  %>% 
+   distinct %>%
+   pivot_wider(names_from = `Transmission Category: Male Adult or Adolescent`, values_from = Count) %>% 
+   mutate(Category="Male") -> df_male_wide
+
+df_male_wide
+```
+
+
+
+```{r}
+bind_rows(df_male_wide, df_female_wide, df_child_wide) -> df_transmission
+```
+
+
+```{r}
+df_transmission
+```
+
+## Use `pivot_longer` to make the transmission data tidy
+
+
+```{r}
+df_transmission %>% 
+  pivot_longer(cols = c(-Year, -Category), names_to = "Transmission", values_to = "Count")
+```
+
+There are NA's in some rows, we'll remove those
+
+```{r}
+df_transmission %>% 
+  pivot_longer(cols = c(-Year, -Category), names_to = "Transmission", values_to = "Count") %>% 
+  na.omit(Count) -> df_transmission_tall
+```
+
+```{r}
+df_transmission_tall
+```
+
+## Create a summary table
+
+
+```{r}
+df_transmission_tall %>% 
+   group_by(Transmission) %>% 
+   summarize(Deaths=sum(Count))
+```
+
+
+## Plot example 1
+
+```{r}
+df_transmission_tall %>%
+   ggplot(aes(x=Transmission, y=Count, fill=Transmission)) +
+   facet_grid(Year ~ Category) +
+   geom_bar(stat='Identity') +
+   theme(axis.text.x=element_blank(),
+      axis.ticks.x=element_blank())
+
+# fill = legend 
+# "kable"
+# "kableExtra"
+```
+
+## Plot example 2
+
+
+```{r}
+df_transmission_tall %>%
+    ggplot(aes(x=Year, y=Count, fill=Transmission)) +
+    facet_wrap(~Transmission, ncol=1, scales="free_y") +
+    geom_point() +
+    geom_smooth() +
+    guides(fill="none") -> g
+```
+
+
+```{r, fig.height= 15, fig.width= 5}
+suppressWarnings(print(g))
+
+#ggplot to ignore NA
+```
+
+## Exercises
+
+**1**. Read the file `files/persons-living-with-hiv-aids.xlsx` into a data frame.
+
+
+```{r}
+df2<- read_excel('files/persons-living-with-hiv-aids.xlsx')
+df2
+```
+
+**2**. How many rows and columns are there?
+
+
+```{r}
+df2 %>% dim
+# 225 rows, 4 columns
+```
+
+**3**. Is the number of Asians with HIV growing over time? Do this using a bar plot.
+
+
+```{r}
+
+df2  %>% select(Category) %>% distinct
+df2 %>% filter(Category == "Race/Ethnicity")  %>% distinct
+
+df2 %>%
+filter(Group == "Asian*" | Group == "Asian**")  %>% 
+select(Year, Group, Count) %>%
+mutate(Year = as_factor(Year)) -> df_asian
+
+df_asian 
+
+df_asian %>%
+   ggplot(aes(x=Year, y=Count, fill=Group)) +
+   geom_bar(stat='Identity')
+
+df_asian %>%
+   ggplot(aes(x=Year, y=Count, fill=Year)) +
+   geom_bar(stat='Identity')
+
+```
+
+**4**. Make a horizontal bar chart of the total number of PWH over all years for each ethnic group. There should be a single Asian group. The bar chart should display the names of each ethnic group on the y-axis, and the number of deaths on the x-axis, where the ethnic groups are ordered from fewest (top) to most (bottom) deaths.
+
+
+```{r}
+
+df2  %>% select(Category) %>% distinct
+df2 %>% filter(Category == "Race/Ethnicity")  %>% distinct
+
+df2 %>%
+filter(Category == "Race/Ethnicity")  %>% 
+select(Year, Group, Count) -> df_allPWH
+
+df2 %>%
+   mutate(Group = str_replace(Group, 'Asian.*', 'Asian')) %>%
+   filter(Category == "Race/Ethnicity") %>%
+   group_by(Group) %>%
+   summarize(PWH=sum(Count)) %>%
+   arrange(desc(PWH)) -> descPWH
+
+df2 %>%
+   mutate(Group=factor(Group, levels=Group)) %>%
+   ggplot(aes(x=Group, y=PWH)) +
+   geom_bar(stat='Identity') +
+   coord_flip()
+   ...

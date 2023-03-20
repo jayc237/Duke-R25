@@ -1,0 +1,65 @@
+---
+title: "RStudio and RMarkdown"
+subtitle: "An Introduction to Nice Things in R"
+author: "Frances Hung"
+date: "10/6/2022"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+echo = showing output
+
+Setup Options chunk:
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      fig.height = 12,
+                      fig.width = 4,
+                      include = TRUE)
+
+```
+
+Welcome to the first series of workshops on Quantitative Methods for HIV Researchers! This first series is an introduction to R that will include basic R constructs, followed by an introduction to R's tools for data cleaning and visualization.
+
+notes: example
+
+# Main heading
+
+## Sub heading
+
+### Sub sub heading
+
+*italics*
+
+**bold**
+
+## Why R Helps with Reproducibility
+
+R is a language widely used by statisticians for data cleaning, visualization, and analysis. Unlike doing analysis in Excel or some other mediums, *all output* is created by and can be traced back to code. 
+
+This nice interface for working with R is called RStudio (soon to be renamed Posit). There are usually four windows open: environment/Git, the file system, the console, and whatever code you're working on. You can either work on the DCC or on a local version of RStudio.
+
+## RMarkdown
+
+RMarkdown is a special type of file that can be created in RStudio. It can integrate R code with plain text to run/document analysis and create reports. Code goes in special sections called chunks, and we can format plain text using markdown commands or the visual tab. We can even put in-line code in plain text. For example, today is `r Sys.Date()`.
+
+The shortcut on windows for a code chunk is "r - Shift -Tab". In the below code chunks, we write some code and R evaluates and prints output.
+
+Open new code chunk:
+```{r label}
+
+```
+
+
+```{r division}
+8/4
+```
+
+
+
+```{r printingHi}
+print("Hi! Welcome to RMarkdown.")
+2+1
+```
+
+

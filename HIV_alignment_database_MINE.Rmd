@@ -1,0 +1,249 @@
+---
+title: "Quantitative Methods for HIV Researchers"
+subtitle: "HIV Alignments Database"
+author: "Janice M. McCarthy"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+This exercise is based on the [HIV sequence database](https://www.hiv.lanl.gov/content/sequence/HIV/SI_alignments/set10.html) at Los Alamos National Laboratory. 
+
+Begin by downloading a zipped archive of 'Special Interest Data set 10'. This is a longitudinal data set of viral epitopes and T-cell immunity measures. There are Excel spreadsheets corresponding to clinical data (CD4 and CD8 counts plus viral load), counts of epitopes that are strongly selected, weakly selected, etc.
+
+There are also fasta files, presumably used to get the alignments and counts, but we won't be using those.
+
+Execute the setup chunk:
+
+```{r setup, include=FALSE, root.dir = "~/2022-2023-hiv-workshop/data_science/examples/sequence"}
+library(purrr)
+library(tidyverse)
+library(readxl)
+```
+
+First, use the following code block to download the zip file and create a list of dataframes with the contents of each Excel spreadsheet. I copied this code from a help forum.
+
+```{r}
+############################# Code from help forum ####################################333
+# url <- "url-to-your-zip"
+# path_zip <- "your-downloaded-zip-local-path"
+# path_unzip <- "path-where-to-save-unzip-files"
+# destfile <- "archive.zip"
+# 
+# # download zip
+# curl::curl_download(url, destfile = paste(path_zip, destfile, sep = "/"))
+# 
+# #unzip
+# unzip(destfile, exdir = path)
+# 
+# # list all files
+# files <- list.files(path = path_unzip)
+#  
+# # apply map_df() to iterate read_csv over files
+# data <- map_df(paste(path_unzip, files, sep = "/"),
+#                      read_csv,
+#                      ## additional params to read_csv here
+#                           )
+
+```
+
+```{r}
+
+url <- "https://www.hiv.lanl.gov/content/sequence/HIV/SI_alignments/data/set10_PIC1362_Liu.zip"
+path_zip <- "~/2022-2023-hiv-workshop/data_science/examples/sequence/"
+path_unzip <- "~/2022-2023-hiv-workshop/data_science/examples/sequence/files"
+destfile <- "set10_PIC1362_Liu.zip"
+
+# download zip
+curl::curl_download(url, destfile = paste(path_zip, destfile, sep = "/"))
+
+#unzip
+unzip(paste(path_zip, destfile, sep = "/"), exdir = path_unzip)
+
+# list all files
+files <- tibble(filename = list.files(path = path_unzip))
+
+files %>% filter(str_detect(filename, "xls")) -> files
+ 
+# apply map_df() to iterate read_excel over files
+df_list <- map(paste(path_unzip, as_vector(files), sep = "/"),
+                     read_excel
+                     ## additional params to read_csv here
+                          )
+df_list
+
+```
+
+Ok. Now we have a list, with each file in a different dataframe. But why are all the columns character? Seems like we may have a format issue. Let's go over to the website and look at the spreadsheets. (We should have done this first. This has been a painful exercise in 'know how your input is formatted')
+
+We want the `Longitudinal CTL Responses` data.
+
+[HIV sequence database](https://www.hiv.lanl.gov/content/sequence/HIV/SI_alignments/set10.html)
+
+Ok. We're back. And we just found out the headers are a bit of a problem. The clinical data is fine, but the persistent_epitopes file has multiple headers. Now you know why statisticians hate excel. It's pretty and all, but getting it read in correctly can be a real pain, depending on formatting.
+
+There seem to be 3 different types of formatting: one has a main header that just informs us that these are CTL responses, followed by two header lines that describe the epitope; a second has the main header, then the tag 'original' or 'variant' followed by a 2 line header that defines the epitope sequence in the first line, and then the description in the 'original' column, and is blank for variants (this is actually helpful, because we can figure out which rows are variants). The third is the one we like. It has one header row that describes the column entries.
+
+We are going to need to do this manually. We'll leave the simple one (clinical data) alone for now. Let's figure out how to handle the 'strongly selected' epitope file.
+
+We'll need to do this stepwise, extracting parts of the file at a time, then re-constructing into a nice, tidy tibble.
+
+```{r}
+# extract second  and third rows into a tibble.
+
+colnames_strong <- read_excel("~/2022-2023-hiv-workshop/data_science/examples/sequence/files/strongly_selected_epitopes.xlsx", skip = 1, n_max = 2)
+
+colnames_strong
+```
+
+Well, we have a small problem, and that is that the first column has a header that spans two cells (yuck!). We can tell read_excel to ignore this using the range argument.
+
+```{r}
+colnames_strong <- read_excel("~/2022-2023-hiv-workshop/data_science/examples/sequence/files/strongly_selected_epitopes.xlsx", skip = 1, n_max = 2, range = cell_cols("B:I"))
+
+colnames_strong
+```
+
+Ack! Not what we wanted. The ranges option has overridden our 'n_max' option. But we can extract what we want from this - the first two rows contain the column names.
+
+```{r}
+colnames_strong <- read_excel("~/2022-2023-hiv-workshop/data_science/examples/sequence/files/strongly_selected_epitopes.xlsx", skip = 1, n_max = 2, range = cell_cols("B:I"))
+
+colnames_strong <- colnames_strong[1:2, ]
+
+colnames_strong
+```
+
+Now, lets get a character vector that has both strings for each epitope. Concatenate = str_c
+
+```{r}
+colnames_strong <- colnames_strong[1:2, ]
+colnames_strong <- str_c(colnames_strong[1,], colnames_strong[2,])
+colnames_strong
+```
+
+Now we are ready to extract the data into a tibble. We'll just skip the first 3 rows.
+
+```{r}
+strongly_selected_df <- read_excel("~/2022-2023-hiv-workshop/data_science/examples/sequence/files/strongly_selected_epitopes.xlsx", skip = 3, col_names = c("DPS", colnames_strong))
+
+strongly_selected_df
+
+```
+
+Almost there. We notice that the read function decided that DPS is a character variable. That's probably not what we want. We can fix this in one or two ways: We can just use `as_integer` as we have done before. We can also tell the read function that we want DPS to be an integer value by setting the `col_types` option.
+
+```{r}
+strongly_selected_df <- read_excel("~/2022-2023-hiv-workshop/data_science/examples/sequence/files/strongly_selected_epitopes.xlsx", skip = 3, col_names = c("DPS", colnames_strong), col_types = c("numeric", rep("guess", length(colnames_strong))))
+
+strongly_selected_df
+```
+One last thing: We noticed that the last two rows of the .xlsx file are not data. They are one blank row and one row that notes DPS stands for 'days post onset of acute symptoms'. Might as well remove these last two rows:
+
+```{r}
+strongly_selected_df %>% filter(!is.na(DPS)) -> strongly_selected_df
+
+# do not use == "NA", use is.na()
+
+strongly_selected_df
+```
+
+```{r}
+strongly_selected_df %>% pivot_longer(cols = -DPS, names_to = "Epitope", values_to = "CTL") -> strongly_selected_df_long
+
+strongly_selected_df_long %>% ggplot(aes(x = DPS, y = CTL, color = Epitope)) + geom_point()
+
+strongly_selected_df_long %>% ggplot(aes(x = DPS, y = CTL, color = Epitope)) + geom_point() + facet_wrap("Epitope")
+```
+
+Whew! Well, that one is done.
+
+Exercise: Fix the other files that have the same format.
+
+Do the same for the files that have the same structure.
+
+```{r weakly_selected_epitopes}
+
+colnames_weak <- read_excel("~/2022-2023-hiv-workshop/data_science/examples/sequence/files/weakly_selected_epitopes.xlsx", skip = 1, n_max = 2, range = cell_cols("B:K"))
+
+colnames_weak <- colnames_weak[1:2, ]
+colnames_weak <- str_c(colnames_weak[1,], colnames_weak[2,])
+
+colnames_weak
+
+weakly_selected_df <- read_excel("~/2022-2023-hiv-workshop/data_science/examples/sequence/files/weakly_selected_epitopes.xlsx", skip = 3, col_names = c("DPS", colnames_weak))
+
+weakly_selected_df %>% filter(!is.na(DPS)) -> weakly_selected_df
+
+weakly_selected_df
+```
+
+```{r persistent_epitopes}
+colnames_pers <- read_excel("~/2022-2023-hiv-workshop/data_science/examples/sequence/files/persistent_epitopes.xlsx", skip = 1, n_max = 2, range = cell_cols("B:H"))
+
+colnames_pers <- colnames_pers[1:2, ]
+colnames_pers <- str_c(colnames_pers[1,], colnames_pers[2,])
+
+colnames_pers
+
+pers_epitopes_df <- read_excel("~/2022-2023-hiv-workshop/data_science/examples/sequence/files/persistent_epitopes.xlsx", skip = 3, col_names = c("DPS", colnames_pers))
+
+pers_epitopes_df %>% filter(!is.na(DPS)) -> pers_selected_df
+
+pers_epitopes_df
+
+
+
+```
+
+Now, onto the next file type that has an added layer of complexity: We want to keep the 'original' and 'variant' tags somehow. 
+
+It's helpful that the original has the epitope description on the second (true) header line, so we'll use that to create a 'variant/original' tag for each column.
+
+```{r}
+colnames_vars_env <- read_excel("~/2022-2023-hiv-workshop/data_science/examples/sequence/files/variant_env_epitopes.xlsx",
+          skip = 3, n_max = 2, range = cell_cols("B:AF"))
+
+colnames_vars_env
+
+var_orig <- ifelse(is.na(colnames_vars_env[1,]),"Variant", "Original") 
+
+```
+Now we'll concatenate the 2 rows for 'original'
+
+```{r}
+
+colnames_vars_env <- ifelse(!is.na(colnames_vars_env[3,]),str_c(colnames_vars_env[2,], colnames_vars_env[3,]), colnames_vars_env[2,]) 
+
+colnames_vars_env
+```
+and concatenate the two header lines we've just created.
+
+```{r}
+
+colnames_vars_env <- str_c(var_orig, colnames_vars_env, sep = "-")
+
+colnames_vars_env
+
+```
+Now, put it all together:
+```{r}
+vars_env_df <- read_excel("~/2022-2023-hiv-workshop/data_science/examples/sequence/files/variant_env_epitopes.xlsx", skip = 4, 
+                          col_names = c("DPS", colnames_vars_env), col_types = c("numeric", rep("guess", length(colnames_vars_env))))
+
+vars_env_df
+
+vars_env_df %>% filter(!is.na(DPS)) -> vars_env_df
+
+vars_env_df
+```
+
+Ok. That should do it. Now your turn:
+
+Exercise:
+
+Do the same for the other files in this format.
+
+```{r}
+
+```
+

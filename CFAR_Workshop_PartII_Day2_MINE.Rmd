@@ -1,0 +1,1586 @@
+---
+title: "Quantitative Methods for HIV Researchers"
+subtitle: "Part II Day 2: Probability, Distributions, and Hypothesis Testing"
+author: "Lynn Lin, PhD"
+date: "January 26, 2021"
+output: 
+  rmdformats::material:
+    code_folding: hide
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+Sys.setenv("LANGUAGE"="En")
+Sys.setlocale("LC_ALL", "English")
+
+#change for container
+setwd("~/Project_repo/R25teaching/2022-2023-hiv-workshop/statistics")
+
+library(tidyverse)
+library(vioplot)
+library(DT)
+```
+
+
+# Introduction {.tabset}
+
+## Learning Objectives and Goals 
+
+### Probability and Distribution 
+
+- Introduce random variables and probability distributions
+
+- Define population parameters and sample statistics
+
+- Introduce sampling distributions, the normal distribution, and the Central Limit Theorem
+
+### Confidence Intervals
+
+- Introduce inferential statistics
+
+- Construct confidence intervals for population parameters
+
+## Case Study #1 
+
+Efficacy and Tolerability of 3 Nonnucleoside Reverse Transcriptase Inhibitor-Sparing Antiretroviral Regimens for Treatment-Naive Volunteers Infected With HIV-1: A Randomized, Controlled Equivalence Trial
+
+https://doi.org//10.7326/M14-1084
+
+Comparison of the Metabolic Effects of Ritonavir-Boosted Darunavir or Atazanavir Versus Raltegravir, and the Impact of Ritonavir Plasma Exposure: ACTG 5257
+
+https://doi.org/10.1093/cid/civ193
+
+```{r}
+Case1 <- read.csv(file="Data/data_Case1.csv", na.strings="",
+    stringsAsFactors=TRUE)
+
+# create dataset with change in LDL from week 0 to week 24
+Case1LDL <- Case1 %>% filter(week %in% c(0,24)) %>%
+    select(ntisid, Arm, week, LDL) %>%
+    reshape(v.names=c("LDL"), timevar="week", idvar="ntisid",
+        direction="wide", sep="w") %>%
+    mutate(LDLchg=LDLw24-LDLw0)
+```
+
+NTISID: NTIS Identification number
+
+WEEK: Study week
+
+ARM: Treatment group (A=TRV+RTV+ATV, B=TRV+RAL, C=TRV+RTV+DRV)
+
+AGE: Age at study enrollment (years)
+
+SEX: Sex
+
+RACE: Race
+
+AIDS_DX: Prior AIDS diagnosis
+
+CVDHX: CVD history	
+
+MODET: Mode of HIV transmission	
+
+IVDRUG: History of injection drug use
+
+DRINKER: Alcohol drinking category
+
+HEPB: Hepatitis B surface antigen status (1=positive, 2=negative)
+	
+HEPC: Hepatitis C virus status (1=positive, 2=negative)
+
+CRCL_BSL: Calculated creatinine clearance (mL/min/1.73m2)
+
+SEXPREF: Sex partner preference
+	
+HOWSURE1: Sure take all/most of HIV meds
+
+HOWSURE2: Sure HIV meds have positive effect?
+	
+HIVRNA: HIV-1 RNA (copies/ml)
+
+CD4: CD4+ cell count, closest to the visit window (cells/mm3)
+
+CD8: CD8+ cell count (cells/mm3)
+
+SBP: Systolic blood pressure (mmHg)
+
+EGFR_MDRD: Estimated glomerular filtration rate (mL/min/1.73m2)
+
+TRIGS: Fasting triglycerides (mg/dL)
+
+LDL: Fasting calc LDL-C (mg/dL)
+
+FPG: Fasting glucose (mg/dL)
+
+BMI: Body mass index (kg/m2)
+
+EVERSMOKER: Smoking history
+	
+HEALTH: In general, would you say your health is?
+
+WGHTNOW: Think about your weight today, do you consider yourself to be?
+
+WGHTAGO: Thinking about your weight now and your weight a year ago, are you more or less worried about your weight than before?
+
+
+## Case Study #2
+
+A Superiority of Viral Load Over CD4 Cell Count When Predicting Mortality in HIV patients On Therapy
+
+https://doi.org/10.1186/s12879-019-3781-1  
+
+```{r}
+Case2 <- read.csv(file=paste0("Data/data_Case2.csv"), na.strings="", stringsAsFactors=TRUE)
+Case2$VL[which(Case2$VL<50)] <- 50  # if VL <50, set to 50, the lower limit
+Case2$VL[which(Case2$VL>500000)] <- 500000  # set to upper limit
+Case2 <- Case2 %>%  mutate(log10VL=log10(VL),
+      VLud=ifelse(VL<=50, 1, 0))  # indicator for undetectable VL
+
+# Create vector of virologic control over follow-up indicator
+getVC <- function(x){  # x will be a vector of 0s, 1s, or NAs
+    ifelse( any(x==0, na.rm=TRUE), 0, 1) 
+}
+
+# apply the function above to the follow-up data only
+# (no one in control at baseline)
+Case2fup <- Case2 %>% filter(t !=0) %>% droplevels  #  follow-up data
+VC <- tapply(Case2fup$VLud, Case2fup$SID, getVC)
+
+# Merge it with the baseline data
+Case2VC <- Case2 %>% filter(t==0) %>% select(SID, NonAdhBL) %>%
+    merge(y=VC, by.x="SID", by.y=0, all=TRUE) %>%
+    rename(VCfup=y) %>% droplevels()
+
+rm(Case2fup, getVC, VC)  # clean up to prevent confusion
+```
+
+SID: Participant identifier
+
+RxClass: HIV medication class combination
+
+NonAdhBL: Medication non-adherence status (0=adherent, 1=non-adherent)
+
+t: Time (years)
+
+Age: Age at enrollment (years)
+
+Sex: Sex (0=female, 1=male)
+
+Weight: Weight (kg)
+
+VL: HIV RNA (copies/mL)
+
+CD4: CD4 cell count (cells/mm3)
+
+Death: Indicator of participant death (0=no, 1=yes)
+
+
+
+# Probability and Distributions
+
+
+## Definitions 
+
+- **Population**: a collection of elements of interest (in clinical research, usually humans)
+
+- **Variable**: a characteristic that takes different values for different elements in the population
+
+- **Random sample**: a subset of independently and randomly selected elements from a population
+
+- **Random variable**: a characteristic that takes different values for different elements in sample
+
+- **Sample space**: the set of all possible outcomes of a random variable
+
+- **Event**: any subset of interest of the possible outcomes in the sample space
+
+- **Probability**: relative frequency of an outcome to all possible outcomes in the sample space; denoted $P(Y \epsilon A)$, where Y is a random variable and A is a subset of the sample space
+
+<br>
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+### Case #1
+
+**Population**: "Treatment-naive persons aged 18 years or older with HIV-1 RNA levels greater than 1000 copies/mL without resistance to nucleoside reverse transcriptase inhibitors or protease inhibitors."
+
+**Variable**: Change in LDL cholesterol after HIV treatment
+
+**Random sample**: Randomly select 300 individuals
+
+**Random variable**: Measure change in LDL from week 0 to week 24 in the 300 individuals
+
+**Sample space**: Theoretically, $(-\infty, \infty)$, practically...?
+
+**Event**: Someone chosen at random will have a change in LDL $>10$ mg/dL 
+
+**Probability**: $P(Y>10)$; can be estimated from sample
+
+```{r}
+ggplot(data.frame(y = c(-73, 77)), aes(y)) +
+  stat_function(fun = dnorm, args=list(mean= 2, sd=25)) + 
+  stat_function(fun = dnorm, 
+                args=list(mean= 2, sd=25),
+                xlim = c(10,77),
+                geom = "area",
+                fill="darkred") + 
+  labs(title="PDF of N(2,625)",
+       y="f(y) = Density") + 
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+</div>
+
+<br>
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+### Case #2
+
+**Population**: "HIV-infected patients...at a Wellness clinic in Bela Bela, South Africa, from year 2005 to year 2009...15 years and older."
+
+**Variable**: Virologic control over follow-up (HIV RNA <50 copies/mL)
+
+**Random sample**: randomly select 320 individuals
+
+**Random variable**: ?
+
+**Sample space**: ?
+```{r}
+# random variable: [type answer here]
+# sample space: [type answer here]
+```
+
+
+</div>
+
+
+*** 
+
+
+## Random Variables and Probability Distributions 
+
+A **random variable** is a characteristic that takes different values for different elements in sample.
+
+Random variables are denoted by uppercase letters, typically X, Y, or Z.
+
+Random variables can be discrete: the values are countable, isolated
+
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+Hospital readmissions after initial discharge (0, 1, 2, ...); virologic control
+
+</div> 
+
+Random variables can be continuous: the values are on a continuum, uncountable
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+Age, BMI, viral load, change in LDL, CD4, recovery time after surgery
+
+</div>
+
+**Probability mass function (PMF)**: a function that maps every possible value of a discrete random variable to the probability of that value.
+
+**Probability density function (PDF)**: a curve that specifies the probability (area under the curve) that a continuous random variable falls within a certain interval.
+
+*** 
+
+
+## Probability Mass Functions for Discrete Random Variables {.tabset}
+
+Denoted as $f_Y (y)$. Maps the realization $y$ of a random variable $Y$ to a probability. In other words, $f_Y (y_i )=P(Y=y_i)$.
+
+Properties:
+
+1. $0 \le f_Y (y_i ) \le 1$, for all $y_i$ in the sample space
+
+2. $\sum_i f_Y (y_i) = 1$
+
+$f_Y (y_i)$ can be displayed as a table, graph, or mathematical expression.
+
+### Example
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+**Population**: Babies born at Duke Regional Hospital
+
+**Variable**: Number of babies with type O blood
+
+**Random sample**: four babies
+
+**Random variable**: $Y$ = the number of babies (out of 4) with type O blood
+
+The PMF of $Y$ is given in the table below.
+
+|   Y=y  |    0   |    1   |    2   |    3   |    4   | 
+|-------:|-------:|-------:|-------:|-------:|-------:|
+|$f_Y(y)$|  0.1   | 0.31   |  0.36  |   0.19 |  0.04  | 
+
+(First, are the properties of a PMF met?)
+
+Let A={All four babies have type O blood}. P(A)=?
+
+```{r}
+#P(A) = P(Y = 4) = [type answer here]
+```
+
+Let B={At least two babies have type O blood}. P(B)=?
+
+```{r}
+#P(B) = P(Y >= 2) = [type answer here]
+```
+
+Let C={Between 1 and 3 babies have type O blood}. P(C)=?
+
+```{r}
+#P(C) = P(1 <= Y <= 3) = [type answer here]
+```
+
+</div> 
+
+### Expectation and Variance 
+
+The **expected value** of $Y$ is the population mean, defined as
+
+$$\mu = E(Y) = \sum_{i=1}^{R} y_iP(Y=y_i) = \sum_{i=1}^{R} y_if(y_i)$$
+
+$R$ is the number of possible values in the sample space. $R$ can be finite or infinite. The expectation represents the "average" value of $Y$.
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+Randomly select one person from the population in Case #1 and measure change in LDL. The expected value would be $\mu$ (say, 2 mg/dL).
+</div>
+
+The **variance** is a measure of the spread of all values (with positive probability) around the expectation, defined as
+$$\sigma^2=\textrm{var}(Y)=\sum_{i=2}^R(y_i-\mu)^2P(Y=y_i)=\sum_{i=1}^Ry_i^2P(Y=y_i)-\mu^2$$
+$$=E(Y^2)-\{E(Y)\}^2$$
+The standard deviation of $Y$ is the positive square root of the variance, $\sigma$.
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+Recall $Y=$ # of babies out of 4 with type O blood, with PMF given below.
+
+|   Y=y  |    0   |    1   |    2   |    3   |    4   | 
+|-------:|-------:|-------:|-------:|-------:|-------:|
+|$f_Y(y)$|  0.1   | 0.31   |  0.36  |   0.19 |  0.04  | 
+
+$$E(X) = \sum_{i=1}^R y_iP(Y=y_i) $$
+$$= 0 (0.1) + 1(0.31) + 2(0.36) + 3(0.19) + 4(0.04) = 1.76$$
+
+Out of a sample of 4 babies, we would expect 1.76 of them to have blood type O.
+
+$$E(X^2) = \sum_{i=1}^R y_i^2P(Y=y_i) $$
+$$= 0^2(0.1) + 1^2(0.31) + 2^2(0.36) + 3^2(0.19) + 4^2(0.04) = 4.1$$
+Thus:
+
+$$\sigma^2 = \textrm{var}(Y) = E(Y^2) - (E(Y))^2 = 4.1 - (1.76)^2 = 1.0024$$
+
+</div> 
+
+
+### Binomial Distribution
+
+Suppose we have a fixed number of independent "trials", $n$.
+
+Each trial results in either a success ("event") or a failure ("non-event").
+
+The probability of a success is the same for each trial, denoted by $\pi$.
+
+The random variable $Y$ is the total number of successes in the $n$ trials.
+
+$$f_Y (y)=P(Y=y)=\binom{n}{y} \pi^y (1-\pi)^{n-y}$$ 
+
+$$ y=0,1,2,...,n; \; 0 \le \pi \le 1 $$
+
+Expectation: $E(Y) = n\pi$
+
+Variance: var$(Y) = n\pi * (1- \pi)$
+
+A special case of this is when n=1, called a **Bernoulli** trial.
+
+
+### Binomial Distribution in R 
+
+Note that distributions in R have corresponding density ("d"), distribution ("p"), quantile ("q"), and random number generation ("r") functions.
+
+Let $Y \sim \textrm{Bin}(n=\textrm{size}, p=\textrm{prob})$. 
+
+`dbinom(x, size, prob, log = FALSE)` = $P(Y = x)$
+
+`pbinom(q, size, prob, lower.tail = TRUE, log.p = FALSE)` = $P(Y \le q)$
+
+`qbinom(p, size, prob, lower.tail = TRUE, log.p = FALSE)` = $q_p$ such that $P(Y \le q_p) = p$
+
+`rbinom(n, size, prob)` will generate a sample of size $n$ from a Bin(size, prob)$. 
+
+
+***
+
+## Probability Density Functions for Continuous Random Variables {.tabset}
+
+Also denoted as $f_Y (y)$. A function that maps an interval of $y$ values to the area under the curve over that interval. The AUC is the probability that $Y$ falls within the interval.
+
+Properties:
+
+1. $f_Y (y) \ge 0$, for all $y$ in the sample space
+
+2. $\int_{-\infty}^{\infty} f_Y(y)dx = 1$
+
+3. $P(a \le Y \le b) = \int_{a}^{b} f_Y(y)dy$	
+
+**Caution!** $P(a\le Y\le a)=P(Y=a)=0$. There is no AUC for a single value. Thus $P(a\le Y\le b)$ = $P(a\le Y<b)$ = $P(a<Y\le b)$ = $P(a<Y<b)$. It does not matter if the inequalities are strict or not.
+
+$f_Y (y)$ is given as a mathematical expression or piecewise function.
+
+### Example 
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+**Population**: Individuals who have acquired HIV-associated fungal infection
+
+**Variable**: Survival time (in days) after acquiring infection
+
+**Random sample**: One individual with the infection
+
+**Random variable**: Y= Survival time (in days) after acquiring infection
+
+</div> 
+
+The PDF of Y is given below. 
+
+$$f_Y(y) = \frac{1}{20}e^{-y/20}; \; 0 \le y < \infty$$
+
+```{r}
+yy <- seq(0, 100, by=0.1)             # sample space
+fy <- function(y){ 1/20*exp(-y/20) }  # PDF
+dat <- cbind(yy,fy(yy)) %>% as.data.frame()
+
+a <- ggplot(dat, aes(x=yy,y=fy(yy)))+
+  geom_smooth(method="loess",se=TRUE, fullrange=FALSE, level=0.95,formula = 'y ~ x')+
+  labs(title = "PDF of Survival Time") +
+  xlab("y = time (days)") + ylab("f(y)")+
+  theme(plot.title = element_text(hjust = 0.5))+ 
+  geom_hline(yintercept = 0,linetype="dashed")
+a
+```
+
+(First, are the properties of a PDF met?)
+```{r, results='hide'}
+integrate(f=fy, lower=0, upper=Inf)  # check that it integrates to 1? Yes
+# ify <- function(y){ -exp(-y/20) }  # anti-derivative (closed form)
+# ify(Inf)-ify(0)                    # another way to check
+```
+
+Let A = {The person will survive less than 5 days}.
+
+$P(A) = P(Y\le 5)= \int_0^5 (1/20)e^{-y/20}dy = 0.2212$
+```{r, results='hide'}
+integrate(f=fy, lower=0, upper=5)
+# ify(5)-ify(0)
+
+plot(yy, fy(yy), type="l", col=4, lwd=5, cex=1.3, cex.lab=1.3,
+    cex.axis=1.3, cex.main=1.5, xlab="y = time (days)", ylab="f(y)",
+    main="PDF of Survival Time")
+  xcord <- c(0, seq(0, 5, 0.01), 5)
+  ycord <- c(0, fy(seq(0, 5, 0.01)), 0)
+  polygon(xcord, ycord, col="grey60", border=NA)
+  lines(yy, fy(yy), col=4, lwd=3)
+  abline(h=0, lwd=2, lty=3)
+```
+
+Let B = {The person will survive between 5 and 15 days}.
+
+$P(B) = P(5\le Y\le 15) = \int_5^{15} (1/20)e^{-y/20}dy = 0.3064$
+```{r, results='hide'}
+integrate(f=fy, lower=5, upper=15)
+# ify(15)-ify(5)
+
+plot(yy, fy(yy), type="l", col=4, lwd=5, cex=1.3, cex.lab=1.3,
+    cex.axis=1.3, cex.main=1.5, xlab="y = time (days)", ylab="f(y)",
+    main="PDF of Survival Time")
+  xcord <- c(5, seq(5, 15, 0.01), 15)
+  ycord <- c(0, fy(seq(5, 15, 0.01)), 0)
+  polygon(xcord, ycord, col="grey60", border=NA)
+  lines(yy, fy(yy), col=4, lwd=3)
+  abline(h=0, lwd=2, lty=3)
+```
+
+
+Let C={The person will survive at least 15 days}.
+
+$P(C) = P(Y\ge 15) = \int_{15}^\infty (1/20)e^{-y/20}dy = 0.4724$
+```{r, results='hide'}
+integrate(f=fy, lower=15, upper=Inf)
+# ify(Inf)-ify(15)
+
+plot(yy, fy(yy), type="l", col=4, lwd=5, cex=1.3, cex.lab=1.3,
+    cex.axis=1.3, cex.main=1.5, xlab="y = time (days)", ylab="f(y)",
+    main="PDF of Survival Time")
+  xcord <- c(15, seq(15, 100, 0.01), 100)
+  ycord <- c(0, fy(seq(15, 100, 0.01)), 0)
+  polygon(xcord, ycord, col="grey60", border=NA)
+  lines(yy, fy(yy), col=4, lwd=3)
+  abline(h=0, lwd=2, lty=3)
+```
+
+***
+
+### Expectation and Variance 
+
+The **expected value** of $Y$ is the population mean, defined as
+
+$$\mu = E(Y) = \int_{-\infty}^{\infty} yf(y)dy$$
+The bounds of the integral are over all possible values of $Y$, not necessarily $(-\infty, \infty)$. The expectation represents the "average" value of $Y$.
+
+The **variance** is a measure of the spread of all values around the expectation, defined as
+
+$$\sigma^2 = \textrm{var}(Y) = \int_{-\infty}^{\infty} (y - \mu)^2f(y)dy = \int_{-\infty}^{\infty} y^2f(y)dy - \mu^2 = E(Y^2) - \{E(Y)\}^2$$
+The **standard deviation** of Y is the positive square root of the variance, $\sigma$. 
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+**Population**: Individuals who have acquired HIV-associated fungal infection
+
+**Variable**: Survival time (in days) after acquiring infection
+
+**Random sample**: One individual with the infection
+
+**Random variable**: Y= Survival time (in days) after acquiring infection
+
+$$f_Y(y) =\frac{1}{20}e^{-y/20}, 0 \le y \le \infty$$
+
+$$E(X) = \int_{-\infty}^\infty yf(y) \; dy = \int_0^\infty y\left( \frac{1}{20}e^{-y/20} \right) dy$$
+
+$$ = -(y+20)e^{-y/20} |_0^\infty = 20$$
+The average value of Y is 20 days.
+```{r}
+EYfun <- function(y){ y*(1/20*exp(-y/20)) }  # EY function
+integrate(f=EYfun, lower=0, upper=Inf)
+```
+
+$$E(Y^2) = \int_{-\infty}^\infty y^2f(y) \; dy = \int_0^\infty y^2\left( \frac{1}{20}e^{-y/20} \right) dy $$
+$$= - (y^2 + 40y + 800)e^{-y/20} |_0^\infty = 800$$
+```{r}
+EY2fun <- function(y){ y^2*(1/20*exp(-y/20)) }  # EY^2 function
+integrate(f=EY2fun, lower=0, upper=Inf)
+```
+
+Thus: 
+
+$$\sigma^2 = \textrm{var}(Y) = E(Y^2) - (E(Y))^2 = 800 - (20)^2 = 400$$
+```{r}
+Varfun <- function(y){ (y-20)^2*(1/20*exp(-y/20)) }  # variance function
+integrate(f=Varfun, lower=0, upper=Inf)
+```
+
+</div> 
+
+
+### Normal Distribution 
+ 
+Also known as the Gaussian distribution, it is the most widely used distribution in statistics.
+
+The random variation of many clinical measurements taken are approximately normally distributed.
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+Examples in research studies include age, height, SBP, eGFR, lipids, and countless others. 
+
+</div> 
+
+In other words, it's a good approximation of the distribution of many naturally occurring phenomena.
+
+In addition, the **limiting distribution** of many common distributions (including discrete ones like the Binomial distribution) are normal. As some parameter of the distribution $\to \infty$, the distribution $\to$ Normal.
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+As n $\to \infty$, $Bin(n,\pi) \to N(\mu = n\pi, \sigma^2 = n\pi(1-\pi))$
+
+</div>
+
+***
+
+**PDF for Normal with mean $\mu$ and variance $\sigma^2$**
+
+$$f(y; \mu, \sigma^2) = \frac{1}{\sqrt{2\pi\sigma^2}} \exp \left\{ -\frac{1}{2} \left( \frac{y-\mu}{\sigma} \right)^2 \right\}$$
+
+The expectation of $Y$ is $E(Y) = \mu$. 
+
+The variance of $Y$ is $var(Y) = \sigma^2$. 
+
+The notation $Y \sim N(\mu, \sigma^2)$ means $Y$ is normally distributed with mean $\mu$ and variance $\sigma^2$. 
+
+***
+
+Bell-shaped and symmetric about $\mu$; two parameters describe it completely ($\mu$ and $\sigma^2$):
+
+```{r}
+# Note. This is one case where base R is much easier to use than ggplot2. 
+
+Y1 <- seq(-3,3, l=1000)
+Y2 <- seq(4,16, l=1000)
+Y3 <- seq(-1,21, l=1000)
+Y4 <- seq(-14,18, l=1000)
+
+plot(Y1, dnorm(Y1), type="l", lwd=5, cex=1.3, cex.lab=1.3, cex.axis=1.3,
+    cex.main=1.5, xlim=c(-15,21), ylim=c(0,0.4), xlab="x", ylab="f(x)",
+    main="Normal Distributions")
+  lines(Y2, dnorm(Y2,10,2), col=2, lwd=5)
+  lines(Y3, dnorm(Y3,10,4), col=4, lwd=5)
+  lines(Y4, dnorm(Y4,2,6), col=3, lwd=5)
+  abline(h=0, lwd=2, lty=3)
+  legend("topright", legend=c("N(0,1)", "N(10,4)", "N(10,16)", "N(2,36)"),
+      col=c(1:2,4:3), lwd=3, bty="n", cex=1.3)
+```
+
+***
+
+**Standard Normal Distribution**
+
+The **standard normal** distribution is a special case with $\mu = 0$ and $\sigma^2 = 1$. The PDF is
+
+$$\phi(z) = \frac{1}{\sqrt{2\pi}}\exp \left(-\frac{1}{2}z^2 \right)$$
+
+Standard normal random variables are typically denoted by $Z$. $\phi$ is typically used to denote the standard normal PDF, rather than $f_Z (z)$.
+
+***
+
+
+### Normal Distribution in R
+
+Note that distributions in R have corresponding density ("d"), distribution ("p"), quantile ("q"), and random number generation ("r") functions.
+
+Let $Y \sim N(\mu = \textrm{mean}, \; \sigma^2 = (\textrm{sd})^2)$. 
+
+`dnorm(x, mean, sd, log=FALSE)` = height of the normal density at $x$
+
+`pnorm(q, mean, sd, lower.tail = TRUE, log.p = FALSE)` = $P(Y \le q)$
+
+`qnorm(p, mean, sd, lower.tail = TRUE, log.p = FALSE)` = $q_p$ such that $P(Y \le q_p) = p$
+
+`rnorm(p, mean=0, sd=1)` will generate a sample of size n from a $N(\textrm{mean}, (\textrm{sd})^2)$. 
+
+***
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+`dnorm(x=-1, mean=0, sd=1, log=FALSE)` = 0.2419707
+```{r}
+y_value1 = dnorm(x=-1, mean=0, sd=1, log=FALSE)
+
+ggplot(data.frame(y = c(-4, 4)), aes(y)) +
+  stat_function(fun = dnorm, args=list(mean= 0, sd=1)) + 
+  geom_vline(xintercept = -1, color="darkred") + 
+  geom_hline(yintercept = y_value1, color="darkred") + 
+  labs(title="PDF of N(0,1)",
+       y="f(y) = Density") + 
+  theme_bw()
+```
+
+</div>
+
+<br>
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+`pnorm(q=-1, mean=0, sd=1, lower.tail = TRUE, log.p = FALSE)` = 0.1586553
+
+```{r}
+ggplot(data.frame(y = c(-4, 4)), aes(y)) +
+  stat_function(fun = dnorm, args=list(mean= 0, sd=1)) + 
+  stat_function(fun = dnorm, 
+                args=list(mean= 0, sd=1),
+                xlim = c(-1,-4),
+                geom = "area",
+                fill="darkred") + 
+  geom_text(x=-1.5, y=0.05, label = "0.16") + 
+  labs(title="PDF of N(0,1)",
+       y="f(y) = Density") + 
+  theme_bw()
+```
+
+</div>
+
+<br>
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+`qnorm(p=0.16, mean=0, sd=1, lower.tail = TRUE, log.p = FALSE)` = -0.9944579
+
+```{r}
+ggplot(data.frame(y = c(-4, 4)), aes(y)) +
+  stat_function(fun = dnorm, args=list(mean= 0, sd=1)) + 
+  stat_function(fun = dnorm, 
+                args=list(mean= 0, sd=1),
+                xlim = c(-1,-4),
+                geom = "area",
+                fill="darkred") + 
+  geom_text(x=-1.5, y=0.05, label = "0.16") + 
+  geom_text(x=-0.9945, y=0, label= "-0.9945") +
+  labs(title="PDF of N(0,1)",
+       y="f(y) = Density") + 
+  theme_bw()
+```
+
+</div>
+
+
+# Exercises: Probability and Distributions {.tabset}
+
+## Question 1: PMF 
+
+The PMF example of babies born with type O blood is actually a binomial random variable. The number of trials is $n=4$, and the probability of an event (type O blood) is $\pi=0.44$. That is, $Y \sim \textrm{Bin}(4,0.44)$.
+
+Redo the events using the `binom` functions.
+
+Let A={All four babies have type O blood}. P(A)=?
+```{r}
+# [type answer here] 
+```
+
+Let B={At least two babies have type O blood}. P(B)=?
+```{r}
+# [type answer here] 
+```
+
+Let C={Between 1 and 3 babies have type O blood}. P(C)=?
+```{r}
+# [type answer here] 
+```
+
+Compute $E(Y)$, $E(Y^2)$, and var$(Y)$ using the `binom` functions.
+```{r}
+# [type answer here] 
+```
+
+
+## Question 2: PDF 
+ 
+The PDF example of survival is actually an exponential random variable $Y \sim Exp(\lambda = 1/20)$. Redo the following using the `pexp` function.
+
+Let A={The person will survive less than 5 days}. P(A)=?
+```{r}
+# [type answer here] 
+```
+
+Let B={The person will survive between 5 and 15 days}. P(B)=?
+```{r}
+# [type answer here] 
+```
+
+Let C={The person will survive at least 15 days}. P(C)=?
+```{r}
+# [type answer here] 
+```
+ 
+
+## Question 3: Q-Q Plots for Checking Normality
+
+Plots can help determine if certain distributional assumptions are reasonable.
+
+The normal distribution is one of the most common distributions assumed.
+
+Plotting the **sample quantiles** against what would be expected for a normal distribution can help make that determination.
+This plot is called a Q-Q plot (quantile-quantile plot).
+
+* Plot **quantiles of the observed data** distribution versus the **quantiles of the theoretical normal distribution**.
+
+* Straight line indicates normality assumption is reasonable.
+
+* In R, see `?qqnorm` to create the plot and `?qqline` to add the line
+
+1. Generate 1000 random values from a $N(10,4)$. Create a Q-Q plot and add a line to check normality.
+```{r}
+# [type answer here] 
+```
+
+2. Generate 1000 random values from an Exp$(1/20)$. Create a Q-Q plot and add a line to check normality.
+```{r}
+# [type answer here] 
+```
+
+3. Comment on the differences between the two plots.
+```{r}
+# [type answer here] 
+```
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+Note that Q-Q plots are commonly used to check normality, but the methods described can be used to check **any distribution**.
+```{r}
+set.seed(1)
+Xnorm <- sort(rnorm(1000, mean=10, sd=4))  # normal data
+Xexp  <- sort(rexp(n=1000, rate=1/20))     # non-normal data
+
+Xnormt <- qnorm(ppoints(length(Xnorm)))    # theoretical quantiles
+Xexpt  <- qexp(ppoints(length(Xnorm)), rate=1/20)
+
+# Check that normal data comes from normal distribution
+plot(Xnormt, Xnorm, main="Q-Q Plot for Normal vs. Normal", cex.lab=1.3,
+    cex.axis=1.3, cex.main=1.5, xlab="Normal Theoretical Quantiles",
+    ylab="Normal Sample Quantiles")
+
+# Check that exponential data comes from exponential distribution
+plot(Xexpt, Xexp, main="Q-Q Plot for Exp vs. Exp", cex.lab=1.3,
+    cex.axis=1.3, cex.main=1.5, xlab=" Exponential Theoretical Quantiles",
+    ylab="Exponential Sample Quantiles")
+
+# Check that normal data comes from exponential distribution
+plot(Xexpt, Xnorm, main="Q-Q Plot for Exp vs. Normal", cex.lab=1.3,
+    cex.axis=1.3, cex.main=1.5, xlab="Exponential Theoretical Quantiles",
+    ylab="Normal Sample Quantiles")
+
+# Check that exponential data comes from normal distribution
+plot(Xnormt, Xexp, main="Q-Q Plot for Normal vs. Exp", cex.lab=1.3,
+    cex.axis=1.3, cex.main=1.5, xlab=" Normal Theoretical Quantiles",
+    ylab="Exponential Sample Quantiles")
+```
+
+</div>
+
+
+# Parameters, Statistics, and Sampling Distributions
+
+## Definitions
+
+A **sample statistic** is any value computed or determined from the data in a sample:
+
+**mean, median, standard deviation, maximum, IQR, etc.**
+
+Statistics have population analogues, called **parameters**.
+
+We generally want to draw conclusions about population parameters using statistics computed from a sample.
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+### Case #1
+A researcher wants to know the mean change in LDL among a target population – i.e. the *population mean*. He samples $n=300$ individuals, measures their change in LDL and calculates the *sample mean*. He uses the sample mean to draw inference on the mean proportion.
+
+</div>
+
+<br>
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+### Case #2
+A researcher wants to know prevalence of virologic control among a target population – i.e. the *population proportion*. He samples $n=320$ individuals and counts how many have virologic control over follow-up, the *sample proportion*. He uses the sample proportion to draw inference on the population proportion.
+
+</div>
+
+### Population Mean
+
+The population mean is the "expected value" of a random variable, $Y$, typically denoted as $\mu$. That is, $\mu=E(Y)$.
+
+The mean, $\mu$ can be thought of as what we would expect the value of one realization of the random variable to be. It's the average value of $Y$. 
+
+### Population Variance
+
+The variance is a measure of spread of the distribution around the population mean, typically denoted as $\sigma^2$. That is, $\sigma^2=\textrm{var}(Y)$.
+
+The population standard deviation, $\sigma$, is the square root of the variance.
+
+### Population Percentiles 
+
+Similar to sample percentiles, the $(100\times p)$th percentile - denoted $\zeta_p$ - of a random variable is the value of the random variable that is less than or equal to $\zeta_p, (100\times p)$ percent of the time.
+
+
+### Statistics Are Random Variables
+* Any value computed or derived from a sample is a sample statistic.
+
+* A different sample will yield a different value of the statistic.
+
+* Therefore, multiple samples of the population would yield multiple values of the statistic.
+
+* Because of the randomness of the sample that generates the statistic, the statistic itself is a **random variable**.
+
+* Observing the numeric value of a statistic is considered one possible value of all possible values that statistic could take with repeated samples (of size $n$) from that population.
+
+* Random variables have probability distributions (PMFs and PDFs).
+
+* Statistics are random variables.
+
+* Statistics have probability distributions.
+
+***
+
+## Sampling Distribution of a Statistic
+
+The PMF/PDF of a statistic from a sample of size n is call the **sampling distribution** of that statistic. This distribution describes **how the statistic varies from sample to sample**.
+
+* Let $Y_1,Y_2,...,Y_n$ be a random sample from some distribution, $f_Y (\cdot)$ of interest.
+
+* Each $Y_i$ has the same population distribution $f_Y (\cdot)$ with a set of parameters (e.g., $\mu$, $\sigma^2$, etc.).
+
+* Any statistic created from the sample (e.g., $\bar{Y}, S^2$, etc.) also has a probability distribution, e.g. $f_\bar{Y}(\cdot)$. Note that $f_Y\ne f_\bar{Y}$ . This is the sampling distribution.
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+The PDF of the random variable $\bar{Y}$ is the **sampling distribution of the mean**.
+
+The PDF of the random variable $S^2$ is the **sampling distribution of the variance**.
+
+The PDF for the random variable $M$ is the **sampling distribution of the median**.
+
+</div>
+
+### Standard Error
+The standard deviation of a sampling distribution is called the **standard error**.
+
+### Distinction
+The standard deviation is a general measure of spread about the mean - of a sample or a population, for example.
+
+The standard error is a specific measure of spread about the mean - how values of a **statistic** vary about the mean value. The standard error is the standard deviation of a statistic.
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+The standard deviation of the random variable $\bar{Y}$ is the **standard error of the mean**.
+
+The standard deviation of the random variable $S^2$ is the **standard error of the variance**.
+
+The standard deviation for the random variable $S$ is the **standard error of the standard deviation**.
+
+</div>
+
+## Sampling Distribution of the Sample Mean {.tabset}
+
+*	Let a random variable Y have a specified probability distribution with **population mean $\mu$ and population variance $\sigma^2$**. In symbols, $Y\sim f_Y (y;\mu,\sigma^2 )$.
+
+*	From the distribution $f_Y (y;\mu,\sigma^2 )$, take a random sample $Y_1,Y_2,...,Y_n$. The $Y_i$'s are independent of each other, and all have the same distribution, $f_Y$. $Y_1,Y_2,...,Y_n \sim$ iid $f_Y (y;\mu; \sigma^2)$.
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+Case #1: Suppose the random variable of interest $Y$ is change in LDL (a continuous variable). From the target population, $Y$ follows some (unknown) distribution that has mean $\mu$ and variance $\sigma^2$. Randomly sample $n$ individuals and measure change in LDL of each: $Y_1,Y_2,\ldots,Y_n$. This is a random sample of $Y$. The $Y_i$’s are independent of each other, and they all follow the same distribution.
+
+</div>
+
+<br>
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+Case #2: Suppose the random variable of interest $Y$ is virologic control, defined as HIV RNA < 50 copies/mL (a binary variable). From the target population, $Y$ follows some distribution (Bernoulli) that has mean $\mu$ ($=\pi$) and variance $\sigma^2$ ($=\pi (1-\pi)$). Randomly sample $n$ patients and determine if each has virologic control: $Y_1,Y_2,\ldots,Y_n$. This is a random sample of $Y$. The $Y_i$’s are independent of each other, and they all follow the same distribution (Bernoulli).
+
+</div>
+
+* Compute the sample mean, $\bar{Y}$.
+
+* Then $\bar{Y}$ has a sampling distribution $f_\bar{Y}(\cdot)$ with population mean $\mu$, and population variance $\sigma^2/n$.
+
+* Note: $f_\bar{Y}(\cdot)$ could be the same as $f_Y (\cdot)$, or it could be different. Regardless, the mean of $f_\bar{Y}$ is $\mu$ and the variance is $\sigma^2/n$.
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+Case #1: The sample mean change in LDL has a sampling distribution $f_\bar{Y}(\cdot)$ with  population mean $\mu$, and population variance $\sigma^2/n$.
+
+</div>
+
+<br>
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+Case #2: The sample mean for a binary variable coded as 0 and 1 is the sample proportion. The sample proportion of individuals with virologic control has a sampling distribution $f_\bar{Y}(\cdot)$ ) with population mean $\pi$ and population variance $\pi (1-\pi)$.
+
+</div>
+
+![](Images/day2_img1.jpeg)
+
+Each sample, S1, S2,...,S500 follows some distribution with mean $\mu$ and variance $\sigma^2$.
+
+Take the mean of each sample, $X_1,X_2,...,X_{500}$. This is *also* a random sample.
+
+The mean and variance of the random sample of $X's$ are
+
+$$\bar{X}=\frac{1}{500}\sum_{i=1}^{500}X_i \approx \mu$$
+$$S_X^2=\frac{1}{500-1}\sum_{i=1}^{500}(X_i-\bar{X})^2 \approx \frac{\sigma^2}{n}$$
+
+***
+
+## Normal Population and the Central Limit Theorem
+
+In general, the distribution of the random sample and the sampling distribution of the mean is not necessarily the same.
+
+BUT! Suppose $Y_1,Y_2,...,Y_n \sim$ iid $N(\mu,\sigma^2)$. Then $\bar{Y} \sim N(\mu,\sigma^2/n)$.
+
+In other words, if the distribution of the underlying population of the random sample is normal, then **the sampling distribution of the sample mean is also normal**.
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+Check it out! Create a Q-Q plot of the vector in problem (2) of the Exercise below.
+
+</div>
+
+Even when distribution of the random sample is **not normal**, the CLT says that the **sampling distribution of the mean is approximately normal** for "large enough $n$".
+
+More formally:
+
+Let $Y_1,Y_2,\ldots,Y_n$  be a random sample from **any distribution**, with mean $E(Y_i)=\mu$ and variance var$(Y_i)=\sigma^2>0$. Then $\bar{Y} \sim N(\mu,\sigma^2/n)$ for sufficiently large $n$.
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+**In words**: If a random variable $Y$ has population mean $\mu$ and non-zero variance $\sigma^2$, then the sample mean $\bar{Y}$, based on $n$ observations, is **approximately normally distributed** with mean $\mu$ and variance $\sigma^2/n$ for sufficiently large $n$.
+
+</div>
+
+<br>
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+Check it out! Create a Q-Q plot of the vector in problem (2) below with means from the Bernoulli population.
+
+</div>
+
+***
+
+**Example Population Distributions**
+```{r}
+par(mfrow=c(2,2))
+#----------------------  First plot pop distributions  ---------------------#
+plot(seq(-4, 4, 0.1), dnorm(seq(-4, 4, 0.1)), type="l", lwd=5, cex=1.3,
+    cex.lab=1.3, cex.axis=1.3, cex.main=1.5, xlab="Y = y", ylab="f(y)",
+    main="PDF of N(0,1)")
+
+plot(seq(0,10, l=101), dchisq(seq(0,10, l=101), df=3), type="l", lwd=5,
+    cex=1.3, cex.lab=1.3, cex.axis=1.3, cex.main=1.5, xlab="Y = y",
+    ylab="f(y)", main="PDF of X2(df=3)")
+
+plot(seq(0,5, l=101), dexp(seq(0,5, l=101)), type="l", lwd=5,
+    cex=1.3, cex.lab=1.3, cex.axis=1.3, cex.main=1.5, xlab="Y = y",
+    ylab="f(y)", main="PDF of Exp(1)")
+
+plot(0:1, dbinom(0:1,1,0.8), type="h", lwd=5, cex=1.3, cex.lab=1.3,
+    cex.axis=1.3, cex.main=1.5, xlab="Y = y", ylab="P(Y=y)", ylim=c(0,1),
+    main="PMF Bern(0.8)")
+```
+
+***
+
+**Estimated Sampling Distributions of $\bar{Y}$**
+```{r}
+#--------------------  Estimate Sampling distributions  --------------------#
+NN <- 500  # number of replicates, NOT the sample size!
+nn <- 100  # sample size n = 100
+set.seed(1)
+
+# Normal(0, 1)
+Y_norm <- matrix(rnorm(nn*NN), nrow=100)          # N(0,1)
+Yb_norm <- sort(colMeans(Y_norm))
+
+# Chi-squared(df=3)
+Y_x2 <- matrix(rchisq(nn*NN, df=3), nrow=100)     # X2(df=3)
+Yb_x2 <- sort(colMeans(Y_x2))
+
+# Exponential(1)
+Y_exp <- matrix(rexp(nn*NN, rate=1), nrow=100)    # exp(1)
+Yb_exp <- sort(colMeans(Y_exp))
+
+# Bernoulli(0.8)
+Y_bin <- matrix(rbinom(nn*NN, 1, 0.8), nrow=100)  # Bern(0.8)
+Yb_bin <- sort(colMeans(Y_bin))
+
+Theoretical <- qnorm(ppoints(NN))  # theoretical quantiles of N(0,1)
+
+par(mfrow=c(2,2))
+#----------------------  Plot Sampling distributions  ----------------------#
+par(lwd=2)
+hist(Yb_norm, lwd=2, cex=1.3, cex.lab=1.3, cex.axis=1.3, cex.main=1.5,
+    xlab=expression(bar(Y)), freq=FALSE,
+    main=expression("Sampling Dist. of "*bar(Y)*" (Normal)"))
+  #lines(density(Yb_norm), col="red", lwd=5)
+  curve(dnorm(x, mean=0, sd=sqrt(1/100)), add=TRUE, col="blue", lwd=5)
+
+par(lwd=2)
+hist(Yb_x2, lwd=2, cex=1.3, cex.lab=1.3, cex.axis=1.3, cex.main=1.5,
+    xlab=expression(bar(Y)), freq=FALSE, ylim=c(0,1.6),
+    main=expression("Sampling Dist. of "*bar(Y)*" (Chi-squared)"))
+  #lines(density(Yb_x2), col="red", lwd=5)
+  curve(dnorm(x, mean=3, sd=sqrt(6/100)), add=TRUE, col="blue", lwd=5)
+
+par(lwd=2)
+hist(Yb_exp, lwd=2, cex=1.3, cex.lab=1.3, cex.axis=1.3, cex.main=1.5,
+    xlab=expression(bar(Y)), freq=FALSE,
+    main=expression("Sampling Dist. of "*bar(Y)*" (Exponential)"))
+  #lines(density(Yb_exp), col="red", lwd=5)
+  curve(dnorm(x, mean=1, sd=sqrt(1/100)), add=TRUE, col="blue", lwd=5)
+
+par(lwd=2)
+hist(Yb_bin, lwd=2, cex=1.3, cex.lab=1.3, cex.axis=1.3, cex.main=1.5,
+    xlab=expression(bar(Y)), freq=FALSE,
+    main=expression("Sampling Dist. of "*bar(Y)*" (Bernoulli)"))
+  #lines(density(Yb_bin), col="red", lwd=5)
+  curve(dnorm(x, mean=0.8, sd=sqrt(0.8*0.2/100)), add=TRUE, col="blue", lwd=5)
+```
+
+
+***
+
+**QQ Plots of Sampling Distribution of $\bar{Y}$**
+```{r}
+par(mfrow=c(2,2))
+#-------------------------  QQ Plot of Samp dists  -------------------------#
+# qqnorm(Yb_norm)
+plot(Theoretical, Yb_norm, cex.lab=1.3, cex.axis=1.3, cex.main=1.5,
+    main=expression("Q-Q Plot for "*bar(Y)*" (Normal)"),
+    xlab="Theoretical Quantiles", ylab="Sample Quantiles")
+    qqline(Yb_norm, lwd=2, col=2)
+
+plot(Theoretical, Yb_x2, cex.lab=1.3, cex.axis=1.3, cex.main=1.5,
+    main=expression("Q-Q Plot for "*bar(Y)*" (Chi-squared)"),
+    xlab="Theoretical Quantiles", ylab="Sample Quantiles")
+    qqline(Yb_x2, lwd=2, col=2)
+
+plot(Theoretical, Yb_exp, cex.lab=1.3, cex.axis=1.3, cex.main=1.5,
+    main=expression("Q-Q Plot for "*bar(Y)*" (Exponential)"),
+    xlab="Theoretical Quantiles", ylab="Sample Quantiles")
+    qqline(Yb_exp,lwd=3, col=2)
+
+plot(Theoretical, Yb_bin, cex.lab=1.3, cex.axis=1.3, cex.main=1.5,
+    main=expression("Q-Q Plot for "*bar(Y)*" (Bernoulli)"),
+    xlab="Theoretical Quantiles", ylab="Sample Quantiles")
+    qqline(Yb_bin, lwd=2, col=2)
+#===========================================================================#
+```
+
+### What is considered "sufficiently large"?
+
+A common question is "how large does n have to be?" The answer...it depends. How "non-normal" is the underlying population distribution?
+
+* Discrete population distributions or those highly skewed will need larger sample sizes for the CLT approximation to hold.
+
+* Continuous, symmetric, "bell-shaped" distributions don't need as large of a sample size.
+
+* Some use a rule of thumb of $n\ge 30$ to apply the CLT. DON'T DO THIS. 
+* 30 may not be enough for skewed distributions; 30 may be too much for "almost normal" distributions.
+
+Instead of using rules of thumb or generic guidelines, **know the data** and assumptions, make plots, compute descriptive statistics, run simulations, etc. and make a decision on a case-by-case basis.
+
+***
+
+# Exercise: Sampling Distributions
+
+1. Create a matrix of size $100\times 500$ of data generated from a normal distribution with some mean $\mu$ and some variance, $\sigma^2$ (you are free to choose whatever values you want, or simply use $\mu=0$ and $\sigma^2=1$). 
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+You can use the function `?rnorm`, and be sure to set a seed. This matrix will represent 500 resamples from a target population. Thus, each column is a sample of size $n=100$.
+
+</div>
+```{r}
+set.seed(2894)
+# [type answer here] 
+```
+
+2. Compute the mean of each sample (i.e., each column) and store this in a vector.
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+The resulting vector should have length 500.
+
+</div>
+```{r}
+# [type answer here] 
+```
+
+3. Now, compute the mean and variance of the vector in (2).
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+The mean should be very close to the $\mu$ you specified. The variance should be very close to $\sigma^2/100$.
+
+</div>
+```{r}
+# [type answer here] 
+```
+
+4. Repeat (1) - (3) with data from a Bernoulli distribution.
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+You can use `?rbinom` with `size=1` and `prob=` any $\pi$ you want (e.g., $\pi=0.4$).
+The mean in (3) should be $\approx \pi$ and the variance $\approx \pi(1-\pi)/100$.
+
+</div>
+```{r}
+# [type answer here] 
+```
+
+
+# Confidence Intervals
+
+## A $100(1-\alpha)\%$ Confidence Interval for $\mu$
+
+* Suppose a population is $N(\mu,\sigma^2)$ and interest lies in estimating the population mean, $\mu$.
+
+* If a sample $Y_1,Y_2,\ldots,Y_n$ is drawn from the population, then the sample mean $\bar{Y}$ is the "best" **point estimator** for $\mu$.
+
+* However, because $\bar{Y}$ is a random variable, it is highly unlikely that the estimate $\bar{Y}$ will be exactly equal to $\mu$.
+
+* With a point estimate alone, there is no sense of how far off the realization $\bar{y}$ is from $\mu$. Thus it's preferable to estimate $\mu$ with a range of plausible values, rather than a single number.
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+**Point estimate**: A meteorologist estimates that it will rain at 3pm.
+
+**Interval estimate**: A meteorologist estimates that it will rain at 3pm, but it's possible that it will rain anywhere for 1pm to 5pm.
+
+</div>
+
+***
+
+Suppose a random sample $Y_1,Y_2,\ldots,Y_n\sim N(\mu,\sigma^2)$ with unknown mean and variance.
+Skipping the theory, a $100(1-\alpha)\%$ CI for $\mu$ is defined as
+$$\bar{y}\pm t_{n-1,1-\alpha/2}\frac{s}{\sqrt{n}} \Rightarrow (\bar{y}-t_{n-1,1-\alpha/2}\frac{s}{\sqrt{n}}, \; \;\bar{y}+t_{n-1,1-\alpha/2} \frac{s}{\sqrt{n}})$$
+
+* $\bar{y}$ is the realization of the sample mean
+
+* $s$ is the realization of the sample standard deviation
+
+* $n$ is the sample size
+
+* $t_{n-1,1-\alpha/2}$ is the $(1-\alpha/2)$th quantile of a $t$ distribution with $n-1$ degrees of freedom
+
+* $t_{n-1,1-\alpha/2}$ can be computed from `qt(p=1-a/2, df=n-1, lower.tail=TRUE, log.p=FALSE)`
+
+***
+
+### The t Distribution
+
+* The central $t$ distribution has one parameter $\nu$, called the degrees of freedom.
+* The sample space is
+ $-\infty <y<\infty$
+* It is related to a normal distribution
+* See `dt, pt, qt,` and `rt` functions	 
+
+```{r}
+zz <- seq(-4, 4, 0.1)
+plot(zz, dnorm(zz), type="l", lwd=5, cex=1.3, cex.lab=1.3, cex.axis=1.3,
+    cex.main=1.5, xlab="t", ylab="P(T=t)")
+  lines(zz, dt(zz, df=1), lwd=5, lty=3, col=4)
+  lines(zz, dt(zz, df=10), lwd=5, lty=2, col=2)
+  legend("topleft", c("N(0,1)", "t(1)", "t(10)"), lwd=3, lty=3:1, cex=1.2,
+      col=c(1,4,2),  bty="n")
+```
+
+***
+
+### Example: Confidence Interval for Population Mean $\mu$
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+Case #1: Compute a $90\%$, $95\%$, and $99\%$ confidence interval for the population mean change in LDL from week 0 to week 24 among the target population.
+
+```{r, results='hide'}
+YY <- na.omit(Case1LDL$LDLchg)
+yb <- mean(YY);  s <- sd(YY);  n <- length(YY)  # sample statistics
+yb  # sample mean
+s   # sample standard deviation
+```
+
+$90\%$ CI for the unknown population mean $\mu$
+$$
+\bar{y} \pm t_{n-1, 1-\alpha/2} \frac{s}{\sqrt{n}} \Rightarrow 2.227 \pm 1.651 \left( \frac{25.474}{262} \right) \Rightarrow (-0.37, 4.83)
+$$
+```{r}
+# 90 % CI
+# t.test(x=YY, alternative="two.sided", mu=0, conf.level=0.90)
+tcrit <- qt(0.95, df=n-1)
+yb + c(-tcrit*s/sqrt(n), tcrit*s/sqrt(n))
+```
+
+$95\%$ CI
+$$
+\bar{y} \pm t_{n-1, 1-\alpha/2} \frac{s}{\sqrt{n}} \Rightarrow 2.227 \pm 1.969 \left( \frac{25.474}{262} \right) \Rightarrow (-0.87, 5.33)
+$$
+```{r}
+# 95 % CI
+# t.test(x=YY, alternative="two.sided", mu=0, conf.level=0.95)
+tcrit <- qt(0.975, df=n-1)
+yb + c(-tcrit*s/sqrt(n), tcrit*s/sqrt(n))
+```
+
+$99\%$ CI
+$$
+\bar{y} \pm t_{n-1, 1-\alpha/2} \frac{s}{\sqrt{n}} \Rightarrow 2.227 \pm 2.595 \left( \frac{25.474}{262} \right) \Rightarrow (-1.86, 6.31)
+$$
+```{r}
+# 99 % CI
+# t.test(x=YY, alternative="two.sided", mu=0, conf.level=0.99)
+tcrit <- qt(0.995, df=n-1)
+yb + c(-tcrit*s/sqrt(n), tcrit*s/sqrt(n))
+```
+
+</div>
+
+<br>
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+Case #2: Compute a $90\%$, $95\%$, and $99\%$ confidence interval for the population mean HIV RNA among the target population using the baseline data. (Note that the mean RNA might not be a good measure of central location – why?)
+```{r}
+# [type answer here] 
+```
+
+</div>
+
+***
+
+### Interpretation of Confidence Intervals
+
+* The interval is being constructed around the estimated mean from a sample. Thus, **the interval will change** from sample to sample **because the estimated mean changes** from sample to sample.
+
+* Most of the time, the interval constructed will contain the true population mean $\mu$.
+
+* Rarely, if the sample taken generates one of the more extreme values of the sample mean, the interval will not contain $\mu$.
+
+* In fact, **if we drew many samples**, computed $\bar{y}$, and constructed a CI in this manner for each sample, then **about $100(1-\alpha)%$ of the intervals will contain $\mu$**.
+
+*** 
+
+**Probabilistic Interpretation**
+
+"In repeated sampling from a normally distributed population, $100(1-\alpha)\%$ of all intervals of the form $\bar{y}\pm t_{n-1,1-\alpha/2}\frac{s}{\sqrt{n}}$ will in the long run include the population mean $\mu$."
+
+**Common Practical Interpretation**
+
+"When sampling is from a normally distributed population, we are $100(1-\alpha)\%$ confident that the single interval $\bar{y}\pm t_{n-1,1-\alpha/2}\frac{s}{\sqrt{n}}$ contains the population mean."
+
+**Caution in Interpretation**
+
+The interpretation is NOT a probabilistic statement about the population mean! The true mean $\mu$ is a fixed value - it's not a random variable so it does not have any probability distribution.
+
+**This interpretation is WRONG: "There is a 95% chance (or probability) that the true population mean is between -0.87 and 5.33."**
+
+Once the interval is constructed, the true mean is either in the interval or it is not.
+
+The CI is a statement about what is expected with repeated sampling. The probability in the interpretation is a measure of *how confident* we are that our specific interval contains the true mean; it's not the probability of the mean being in the interval.
+
+The *process* of repeated sampling is what gives the 95% chance that the particular interval created will contain the parameter.
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+**Case #1 Simulation**: Let change in LDL among the target population be normally distributed with $\mu=2$ and $\sigma=25$. If 80 different samples of size $n=300$ were drawn from this population and a 95% CI constructed from each sample, then about 76 (95%) are expected to contain $\mu$ (and 4 are expected not to).
+
+```{r}
+set.seed(121)
+Pop <- rnorm(50000, mean=2, sd=25 )  # Create hypothetical pop'n, N=50000
+#hist(Pop, breaks=40, freq=F)
+#  lines(density(Pop), col=4, lwd=3)
+#  curve(dnorm(x, mean=2, sd=25), add=TRUE, col=2, lwd=3)
+
+# take 80 samples, n=300
+Samps <- replicate(80, sample(Pop, size=300, replace=FALSE))  # 320x80 matrix
+
+
+#-----------------  Write a function that will compute CIs  ----------------#
+CI <- function(x=NULL, a=0.05, mn, SD, n){
+    if(!is.null(x)){  # if data entered, use sample values for CI
+        mn <- mean(x, na.rm=TRUE); SD <- sd(x, na.rm=TRUE); n <- length(x)
+    }
+    tcrit <- qt(c(a/2, 1-a/2), df=n-1)  # critical values for CI
+    CI <- mn + tcrit*SD/sqrt(n)
+    rslt <- c(CI[1], mn, CI[2])
+    return(rslt)
+}                                            # test it out:   CI(Samps[,1])
+#---------------------------------------------------------------------------#
+
+allCIs <- apply(Samps, 2, CI)
+out <- which(allCIs[1,] >2 | allCIs[3,] < 2)  # which don't contain mu?
+
+# par(mar=c(5.1, 4.1, 4.1, 2.1))  # default margins
+par(mar=c(4.1, 4.1, 1, 1))
+plot(0, type="n", cex.lab=1.3, cex.axis=1.3, xlab="CI Values",
+     ylab="Replicate", xlim=range(allCIs), ylim=c(0, ncol(Samps)))
+  segments(x0=allCIs[1,], y0=1:ncol(allCIs), x1=allCIs[3,], lwd=4)
+  segments(x0=allCIs[1,out], y0=out, x1=allCIs[3,out], lwd=4, col=2)
+  points(allCIs[2,], 1:ncol(allCIs), pch=19)
+  abline(v=2, col=4, lwd=5)
+```
+
+</div>
+
+***
+
+### A $100(1-\alpha)\%$ Confidence Interval for $\mu$
+
+Let $Y_1,Y_2,\ldots,Y_n$ be a random sample from some **non-normal** (possibly unknown) distribution, with **unknown** population mean and variance.
+
+It can be shown (CLT and Slutsky's) that if $n$ is sufficiently large, an approximate $100(1-\alpha)\%$ CI for $\mu$ is
+
+$$\bar{y}\pm z_{1-\alpha/2}\frac{s}{\sqrt{n}}    \Rightarrow  \left( \bar{y}-  z_{1-\alpha/2}\frac{s}{\sqrt{n}} ,\bar{y}+ z_{1-\alpha/2}\frac{s}{\sqrt{n}} \right) $$
+
+*	$z_{1-\alpha/2}$ is the $(1-\alpha/2)$th quantile of a $N(0,1)$ distribution
+* $z_{1-\alpha/2}$ can be computed from
+`qnorm(p=1-a/2, mean=0, sd=1, lower.tail=TRUE, log.p=FALSE)`
+
+
+### Example: Confidence Interval for Population Proportion
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+**Case #1**: What is a 95% CI for the population proportion $\pi$ of individuals with change in LDL > 10 mg/dL?
+```{r, results='hide'}
+YY <- ifelse(Case1LDL$LDLchg >10, 1, 0) %>% na.omit()
+addmargins(table(YY, exclude=NULL))
+```
+
+There are 262 non-missing values, thus $Y_1,Y_2,\ldots,Y_{262} \sim$ iid Bern$(\pi)$. The value of $Y_i$ is either 1 (LDL $>10$) or 0 (LDL $\le 10$). Recall that the population mean is $E(Y)=\pi$, and the population variance is $\textrm{var}(Y)=\pi(1-\pi)$.
+The "best" estimate for $\pi$ is the sample proportion (i.e., the sample mean):
+$$\hat{p}=\frac{1}{n}\sum_{i=1}^nY_i=\frac{85}{262}=0.324=\bar{y}$$
+```{r}
+phat <- mean(YY);  n <- length(YY)  # sample statistics
+phat
+```
+
+Assuming the sample size is sufficiently large, a 95% CI is
+$$ \bar{y}\pm z_{0.975}\frac{s}{\sqrt{n}} \Rightarrow \hat{p}\pm z_{0.975}\frac{\sqrt{\hat{p}(1-\hat{p})}}{\sqrt{n}}$$
+
+$$0.324\pm 1.96\frac{\sqrt{0.324(1-0.324)}}{\sqrt{262}} =(0.268, 0.381)$$
+```{r}
+# 0.324 - 1.96 * sqrt(0.324*(1-0.324) / 262)
+phat+qnorm(c(0.025, 0.975))*sqrt(phat*(1-phat)/n)
+```
+
+What is the interpretation of this interval?
+
+</div>
+
+<br>
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+**Case #2**: What is a 95% CI for the population proportion $\pi$ of individuals with virologic control over follow-up?
+```{r}
+# [type answer here] 
+```
+
+</div>
+
+***
+
+## $100(1-\alpha)\%$ CI Summary
+When the underlying population distribution is **normal**:
+$$\bar{y} \pm t_{n-1,1-\alpha/2}\frac{s}{\sqrt{n}} \Rightarrow \left( \bar{y}-t_{n-1,1-\alpha/2}\frac{s}{\sqrt{n}},\bar{y}+t_{n-1,1-\alpha/2} \frac{s}{\sqrt{n}} \right)$$
+This interval is an exact interval (not an approximation).
+
+When the underlying distribution is **not normal**:
+$$\bar{y}\pm z_{1-\alpha/2}\frac{s}{\sqrt{n}} \Rightarrow \left( \bar{y}-z_{1-\alpha/2}\frac{s}{\sqrt{n}},\bar{y}+z_{1-\alpha/2} \frac{s}{\sqrt{n}} \right)$$
+This interval is an approximate interval. 
+
+*	Sampling distributions of statistics have associated standard errors that depend on the sample size.
+
+*	Larger $n \Rightarrow$ smaller standard error $\Rightarrow$ more precise point estimates.
+
+*	The standard error, along with some theory, are used to create interval estimates, i.e., confidence intervals.
+
+*	The width of the interval will depend on the sample size; larger samples will yield more narrow intervals.
+
+*	Decreasing $\alpha$ will yield wider confidence intervals.
+
+*	Increasing the sample variance will also yield wider confidence intervals.
+
